@@ -85,6 +85,7 @@ def stats():
     dbObjects = defaultdict(int)
     stats = {}
     table_sizes = db.table_sizes()
+
     def split_db(tablename):
         i = tablename.find('_')
         if i == -1:
@@ -92,7 +93,7 @@ def stats():
         else:
             return tablename[:i], tablename[i+1:]
     for tablename, sizes in table_sizes.items():
-        dname, name = split_db(tablename)
+        dname, _ = split_db(tablename)
         dbSize[dname] += sizes['total_bytes']
         dbObjects[dname] += sizes['nrows']
     for tablename, sizes in table_sizes.items():
@@ -102,13 +103,13 @@ def stats():
         nobjects += sizes['nrows']
         indexSize += sizes['index_bytes']
         if csize >= int(info['minsize']):
-            dname, name = split_db(tablename)
+            dname, _ = split_db(tablename)
             if tablename not in db.tablenames:
                 link = tablename
             else:
                 link = '<a href = "' + url_for(".api_query", table=tablename) + '">' + tablename + '</a>'
             if not sizes['toast_bytes']:
-                sizes['toast_bytes'] = 0 
+                sizes['toast_bytes'] = 0
             if sizes['nrows']:
                 avg_size = int(round(float(sizes['table_bytes'] + sizes['toast_bytes'] + sizes['extra_bytes']) / sizes['nrows']))
             else:
@@ -152,7 +153,7 @@ def api_query_id(table, id):
         </tr>
         """
         for c in sorted(col_type.keys()):
-            out += "<tr><td>%s</td><td> %s </td>\n" % (c, col_type[c]) 
+            out += "<tr><td>%s</td><td> %s </td>\n" % (c, col_type[c])
         return out
     else:
         return api_query(table, id=id)
@@ -160,7 +161,7 @@ def api_query_id(table, id):
 
 @api_page.route("/<table>")
 @api_page.route("/<table>/")
-def api_query(table, id = None):
+def api_query(table, id=None):
     #if censored_table(table):
     #    return abort(404)
 
@@ -170,6 +171,7 @@ def api_query(table, id = None):
     DELIM = request.args.get("_delim", ",")
     fields = request.args.get("_fields", None)
     sortby = request.args.get("_sort", None)
+
     def apierror(msg, flash_extras=[], code=404, table=True):
         if format == "html":
             flash_error(msg, *flash_extras)
@@ -198,7 +200,7 @@ def api_query(table, id = None):
         return apierror("table %s does not exist", [table], table=False)
     q = {}
 
-    # if id is set, just go and get it, ignore query parameeters
+    # if id is set, just go and get it, ignore query parameters
     if id is not None:
         if offset:
             return apierror("Cannot include offset with id")
@@ -233,13 +235,13 @@ def api_query(table, id = None):
                 elif qval.startswith("py"):     # literal evaluation
                     qval = literal_eval(qval[2:])
                 elif qval.startswith("cs"):     # containing string in list
-                    qval = { "$contains" : [qval[2:]] }
+                    qval = { "$contains": [qval[2:]] }
                 elif qval.startswith("ci"):
-                    qval = { "$contains" : [int(qval[2:])] }
+                    qval = { "$contains": [int(qval[2:])] }
                 elif qval.startswith("cf"):
-                    qval = { "contains" : [float(qval[2:])] }
+                    qval = { "contains": [float(qval[2:])] }
                 elif qval.startswith("cpy"):
-                    qval = { "$contains" : [literal_eval(qval[3:])] }
+                    qval = { "$contains": [literal_eval(qval[3:])] }
             except Exception:
                 # no suitable conversion for the value, keep it as string
                 pass
@@ -287,7 +289,7 @@ def api_query(table, id = None):
     if 'bytea' in coll.col_type.values():
         for row in data:
             for key, val in row.items():
-                if type(val) == buffer:
+                if isinstance(val, buffer):
                     row[key] = "[binary data]"
         #data = [ dict([ (key, val if coll.col_type[key] != 'bytea' else "binary data") for key, val in row.items() ]) for row in data]
     data = Json.prep(data)
@@ -300,7 +302,7 @@ def api_query(table, id = None):
     query = url_for(".api_query", table=table, **next_req)
     offset += len(data)
     next_req["_offset"] = offset
-    next = url_for(".api_query", table=table, **next_req)
+    nxt = url_for(".api_query", table=table, **next_req)
 
     # the collected result
     data = {
@@ -310,7 +312,7 @@ def api_query(table, id = None):
         "start": start,
         "offset": offset,
         "query": query,
-        "next": next,
+        "next": nxt,
         "rec_id": 'id' if coll._label_col is None else coll._label_col,
     }
 
@@ -342,10 +344,11 @@ def api_query(table, id = None):
                                search_schema={table: search_schema},
                                extra_schema={table: extra_schema},
                                single_object=single_object,
-                               query_unquote = query_unquote,
-                               url_args = url_args,
+                               query_unquote=query_unquote,
+                               url_args=url_args,
                                bread=bc,
                                **data)
+
 
 # This function is used to show the data associated to a given homepage, which could possibly be from multiple tables.
 def datapage(labels, tables, title, bread, label_cols=None, sorts=None):
@@ -363,11 +366,11 @@ def datapage(labels, tables, title, bread, label_cols=None, sorts=None):
     if not isinstance(tables, list):
         tables = [tables]
     if not isinstance(labels, list):
-        labels = [labels for table in tables]
+        labels = [labels for _ in tables]
     if label_cols is None:
-        label_cols = ["label" for table in tables]
+        label_cols = ["label" for _ in tables]
     if sorts is None:
-        sorts = [None for table in tables]
+        sorts = [None for _ in tables]
     assert len(labels) == len(tables) == len(label_cols)
 
     def apierror(msg, flash_extras=[], code=404, table=False):

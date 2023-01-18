@@ -143,7 +143,6 @@ class PostgresDatabase(PostgresBase):
         if self._user == "webserver":
             self._execute(SQL("SET SESSION statement_timeout = '25s'"))
 
-
         if self._execute(SQL("SELECT pg_is_in_recovery()")).fetchone()[0]:
             self._read_only = True
         else:
@@ -1095,9 +1094,8 @@ SELECT table_name, row_estimate, total_bytes, index_bytes, toast_bytes,
                     if not os.path.exists(metafile):
                         raise ValueError("meta file missing for {0}".format(tablename))
                     # read metafile
-                    rows = []
                     with open(metafile, "r") as F:
-                        rows = [line for line in csv.reader(F, delimiter=str(sep))]
+                        rows = list(csv.reader(F, delimiter=str(sep)))
                     if len(rows) != 1:
                         raise RuntimeError("Expected only one row in {0}")
                     meta = dict(zip(_meta_tables_cols, rows[0]))

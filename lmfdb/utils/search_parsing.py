@@ -4,7 +4,7 @@
 import re
 import sys
 from collections import Counter
-from lmfdb.utils.utilities import flash_error
+from lmfdb.utils.utilities import flash_error, flash_info
 from sage.all import ZZ, QQ, prod, PolynomialRing, pari
 from sage.misc.decorators import decorator_keywords
 from sage.repl.preparse import implicit_mul
@@ -58,7 +58,7 @@ class PowMulNodeVisitor(ast.NodeTransformer):
         def visit_Num(self, node):  # deprecated for python >= 3.8
             return self.visit_Constant(node)
 
-class SearchParser(object):
+class SearchParser():
     def __init__(
         self,
         f,
@@ -237,7 +237,7 @@ def parse_ints_to_list(arg, max_val=None):
         return [int(n) for n in s.split(",")]
     if "-" in s[1:]:
         i = s.index("-", 1)
-        m, M = s[:i], s[i + 1 :]
+        m, M = s[:i], s[i + 1:]
         if max_val is not None:
             try:
                 M = int(M)
@@ -245,10 +245,10 @@ def parse_ints_to_list(arg, max_val=None):
                 M = max_val
             else:
                 M = min(M, max_val)
-        return [k for k in range(int(m), int(M) + 1)]
+        return list(range(int(m), int(M) + 1))
     if ".." in s:
         i = s.index("..", 1)
-        m, M = s[:i], s[i + 2 :]
+        m, M = s[:i], s[i + 2:]
         if max_val is not None:
             try:
                 M = int(M)
@@ -256,8 +256,9 @@ def parse_ints_to_list(arg, max_val=None):
                 M = max_val
             else:
                 M = min(M, max_val)
-        return [k for k in range(int(m), int(M) + 1)]
+        return list(range(int(m), int(M) + 1))
     return [int(s)]
+
 
 def parse_ints_to_list_flash(arg, name, max_val=None):
     try:
@@ -300,7 +301,7 @@ def parse_multiset(inp, query, qfield):
 
 def parse_range(arg, parse_singleton=int, use_dollar_vars=True):
     # TODO: graceful errors
-    if type(arg) == parse_singleton:
+    if isinstance(arg, parse_singleton):
         return arg
     if "," in arg:
         if use_dollar_vars:
@@ -309,7 +310,7 @@ def parse_range(arg, parse_singleton=int, use_dollar_vars=True):
             return [parse_range(a) for a in arg.split(",")]
     elif "-" in arg[1:]:
         ix = arg.index("-", 1)
-        start, end = arg[:ix], arg[ix + 1 :]
+        start, end = arg[:ix], arg[ix + 1:]
         q = {}
         if start:
             q["$gte" if use_dollar_vars else "min"] = parse_singleton(start)
@@ -324,9 +325,9 @@ def parse_range(arg, parse_singleton=int, use_dollar_vars=True):
 def parse_range2(arg, key, parse_singleton=int, parse_endpoint=None, split_minus=True):
     if parse_endpoint is None:
         parse_endpoint = parse_singleton
-    if type(arg) == str:
+    if isinstance(arg, str):
         arg = arg.replace(" ", "")
-    if type(arg) == parse_singleton:
+    if isinstance(arg, parse_singleton):
         return [key, arg]
     if "," in arg:
         tmp = [
@@ -355,7 +356,7 @@ def parse_range2(arg, key, parse_singleton=int, parse_endpoint=None, split_minus
 # Like parse_range2, but to deal with strings which could be rational numbers
 # process is a function to apply to arguments after they have been parsed
 def parse_range2rat(arg, key, process):
-    if type(arg) == str:
+    if isinstance(arg, str):
         arg = arg.replace(" ", "")
     if QQ_DEC_RE.match(arg):
         return [key, process(arg)]
@@ -365,7 +366,7 @@ def parse_range2rat(arg, key, process):
         return ["$or", tmp]
     elif "-" in arg[1:]:
         ix = arg.index("-", 1)
-        start, end = arg[:ix], arg[ix + 1 :]
+        start, end = arg[:ix], arg[ix + 1:]
         q = {}
         if start:
             q["$gte"] = process(start)
@@ -378,13 +379,13 @@ def parse_range2rat(arg, key, process):
 # We parse into a list of singletons and pairs, like [[-5,-2], 10, 11, [16,100]]
 # If split0, we split ranges [-a,b] that cross 0 into [-a, -1], [1, b]
 def parse_range3(arg, split0=False):
-    if type(arg) == str:
+    if isinstance(arg, str):
         arg = arg.replace(" ", "")
     if "," in arg:
         return sum([parse_range3(a, split0) for a in arg.split(",")], [])
     elif "-" in arg[1:]:
         ix = arg.index("-", 1)
-        start, end = arg[:ix], arg[ix + 1 :]
+        start, end = arg[:ix], arg[ix + 1:]
         if start:
             low = ZZ(str(start))
         else:
@@ -697,14 +698,14 @@ def parse_not_element_of(inp, query, qfield, parse_singleton=int):
 @search_parser(clean_info=True, prep_ranges=True)
 def parse_signed_ints(inp, query, qfield, parse_one=None):
     if parse_one is None:
-        parse_one = lambda x: (int(x.sign()), int(x.abs())) if x != 0 else (1, 0)
+        def parse_one(x): return (int(x.sign()), int(x.abs())) if x != 0 else (1, 0)
     sign_field, abs_field = qfield
     if SIGNED_LIST_RE.match(inp):
         parsed = parse_range3(inp, split0=True)
         # if there is only one part, we don't need an $or
         if len(parsed) == 1:
             parsed = parsed[0]
-            if type(parsed) == list:
+            if isinstance(parsed, list):
                 s0, d0 = parse_one(parsed[0])
                 s1, d1 = parse_one(parsed[1])
                 if s0 < 0:
@@ -719,7 +720,7 @@ def parse_signed_ints(inp, query, qfield, parse_one=None):
         else:
             iquery = []
             for x in parsed:
-                if type(x) == list:
+                if isinstance(x, list):
                     if len(x) == 1:
                         s0, abs_D = parse_one(x[0])
                     else:
@@ -743,7 +744,7 @@ def parse_signed_ints(inp, query, qfield, parse_one=None):
 @search_parser(clean_info=True, prep_ranges=True)
 def parse_rats(inp, query, qfield, process=None):
     if process is None:
-        process = lambda x: x
+        def process(x): return x
     if LIST_RAT_RE.match(inp):
         collapse_ors(parse_range2rat(inp, qfield, process), query)
     else:
@@ -1063,7 +1064,7 @@ def parse_galgrp(inp, query, qfield, err_msg=None, list_ok=True):
 
         galfield, nfield = qfield
         if nfield and nfield not in query:
-            nvals = list(set([s[0] for s in gcs]))
+            nvals = list(set(s[0] for s in gcs))
             if len(nvals) == 1:
                 query[nfield] = nvals[0]
             else:
@@ -1137,11 +1138,17 @@ def parse_inertia(inp, query, qfield, err_msg=None):
 
 # see SearchParser.__call__ for actual arguments when calling
 @search_parser(clean_info=True, error_is_safe=True)
-def parse_padicfields(inp, query, qfield):
+def parse_padicfields(inp, query, qfield, flag_unramified=False):
     labellist = inp.split(",")
+    doflash = False
     for label in labellist:
         if not LF_LABEL_RE.match(label):
             raise SearchParsingError('It needs to be a <a title = "$p$-adic field label" knowl="lf.field.label">$p$-adic field label</a> or a list of local field labels')
+        splitlab = label.split('.')
+        if splitlab[2] == '0':
+            doflash = True
+    if flag_unramified and doflash:
+        flash_info("Search results may be incomplete.  Given $p$-adic completions contain an <a title='unramified' knowl='nf.unramified_prime'>unramified</a> field and completions are only searched for <a title='ramified' knowl='nf.ramified_primes'>ramified primes</a>.")
     query[qfield] = {"$contains": labellist}
 
 def input_string_to_poly(FF):
@@ -1430,7 +1437,7 @@ def parse_bool(inp, query, qfield, process=None, blank=[]):
     if inp in blank:
         return
     if process is None:
-        process = lambda x: x
+        def process(x): return x
     if inp in ["True", "yes", "1", "even"]:
         # artin reps use parse_bool for an is_even parity field
         query[qfield] = process(True)
@@ -1461,7 +1468,7 @@ def parse_restricted(inp, query, qfield, allowed, process=None, blank=[]):
     if inp in blank:
         return
     if process is None:
-        process = lambda x: x
+        def process(x): return x
     allowed = [str(a) for a in allowed]
     if inp not in allowed:
         if len(allowed) == 0:
@@ -1511,7 +1518,7 @@ def parse_equality_constraints(inp, query, qfield, prefix="a", parse_singleton=i
         n = n.strip()
         if not n.startswith(prefix):
             raise SearchParsingError(f"{n} does not start with {prefix}")
-        n = int(n[len(prefix) :])
+        n = int(n[len(prefix):])
         if nshift is not None:
             n = nshift(n)
         t = parse_singleton(t.strip())
@@ -1537,6 +1544,7 @@ def parse_paired_fields(
     parse2(info, tmp_query2, field2, name2, qfield2, **kwds2)
     # print tmp_query1
     # print tmp_query2
+
     def remove_or(D):
         assert len(D) <= 1
         if "$or" in D:
@@ -1605,9 +1613,9 @@ def parse_list_start(inp, query, qfield, index_shift=0, parse_singleton=int):
             # asking for each value to be in the array
             if parse_singleton is str:
                 all_operand = [val for val in parsed_values
-                               if type(val) == parse_singleton and "-" not in val and "," not in val]
+                               if isinstance(val, parse_singleton) and "-" not in val and "," not in val]
             else:
-                all_operand = [val for val in parsed_values if type(val) == parse_singleton]
+                all_operand = [val for val in parsed_values if isinstance(val, parse_singleton)]
 
             if all_operand:
                 sub_query[qfield] = {"$all": all_operand}
@@ -1615,7 +1623,7 @@ def parse_list_start(inp, query, qfield, index_shift=0, parse_singleton=int):
             # if there are other condition, we can add the first of those
             # conditions the query, in the hope of reducing the search space
             elemMatch_operand = [val for val in parsed_values
-                                 if type(val) != parse_singleton and type(val) is dict]
+                                 if not isinstance(val, parse_singleton) and isinstance(val, dict)]
             if elemMatch_operand:
                 if qfield in sub_query:
                     sub_query[qfield]["$elemMatch"] = elemMatch_operand[0]

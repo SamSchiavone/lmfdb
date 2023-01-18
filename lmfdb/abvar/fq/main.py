@@ -200,10 +200,12 @@ def download_search(info):
     strIO = BytesIO()
     strIO.write(s.encode('utf-8'))
     strIO.seek(0)
-    return send_file(strIO, attachment_filename=filename, as_attachment=True, add_etags=False)
+    return send_file(strIO, download_name=filename, as_attachment=True)
 
 @abvarfq_page.route("/data/<label>")
 def AV_data(label):
+    if not lmfdb_label_regex.fullmatch(label):
+        return abort(404, f"Invalid label {label}")
     bread = get_bread((label, url_for_label(label)), ("Data", " "))
     extension_labels = list(db.av_fq_endalg_factors.search({"base_label": label}, "extension_label", sort=["extension_degree"]))
     tables = ["av_fq_isog", "av_fq_endalg_factors"] + ["av_fq_endalg_data"] * len(extension_labels)
@@ -212,10 +214,11 @@ def AV_data(label):
     sorts = [[], ["extension_degree"]] + [[]] * len(extension_labels)
     return datapage(labels, tables, title=f"Abelian variety isogeny class data - {label}", bread=bread, label_cols=label_cols, sorts=sorts)
 
+
 class AbvarSearchArray(SearchArray):
     sorts = [("", "dimension", ['g', 'q', 'poly']),
              ("q", "field", ['q', 'g', 'poly']),
-             ("p", "charactersitic", ['p', 'q', 'g', 'poly']),
+             ("p", "characteristic", ['p', 'q', 'g', 'poly']),
              ("p_rank", "p-rank", ['p_rank', 'g', 'q', 'poly']),
              ("p_rank_deficit", "p-rank deficit", ['p_rank_deficit', 'g', 'q', 'poly']),
              ("curve_count", "curve points", ['curve_count', 'g', 'q', 'poly']),
@@ -224,6 +227,7 @@ class AbvarSearchArray(SearchArray):
     jump_egspan = "e.g. 2.16.am_cn or 1 - x + 2x^2 or x^2 - x + 2"
     jump_knowl = "av.fq.search_input"
     jump_prompt = "Label or polynomial"
+
     def __init__(self):
         qshort = display_knowl("ag.base_field", "Base field")
         q = TextBox(
@@ -308,6 +312,7 @@ class AbvarSearchArray(SearchArray):
             short_label="Points on curve",
             advanced=True,
         )
+
         def nbsp(knowl, label):
             return "&nbsp;&nbsp;&nbsp;&nbsp;" + display_knowl(knowl, label)
         number_field = TextBox(
@@ -433,10 +438,13 @@ class AbvarSearchArray(SearchArray):
         )
         use_geom_index = CheckboxSpacer(use_geom_decomp, colspan=4, advanced=True)
         use_geom_refine = CheckboxSpacer(use_geom_decomp, colspan=5, advanced=True)
+
         def long_label(d):
-            return nbsp("av.decomposition", "Dimension %s factors" % d)
+            return nbsp("av.decomposition", f"Dimension {d} factors")
+
         def short_label(d):
-            return display_knowl("av.decomposition", "Dim %s factors" % d)
+            return display_knowl("av.decomposition", f"Dim {d} factors")
+
         dim1 = TextBox(
             "dim1_factors",
             label=long_label(1),
@@ -640,7 +648,7 @@ def jump(info):
         lead = cdict[deg]
         if lead == 1: # accept monic normalization
             lead = cdict[0]
-            cdict = {deg-exp : coeff for (exp, coeff) in cdict.items()}
+            cdict = {deg-exp: coeff for (exp, coeff) in cdict.items()}
         if cdict.get(0) != 1:
             flash_error ("%s is not valid input.  Polynomial must have constant or leading coefficient 1", jump_box)
             return redirect(url_for(".abelian_varieties"))
@@ -654,10 +662,12 @@ def jump(info):
         except ValueError:
             flash_error ("%s is not valid input.  Expected a label or Weil polynomial.", jump_box)
             return redirect(url_for(".abelian_varieties"))
+
         def extended_code(c):
             if c < 0:
                 return 'a' + cremona_letter_code(-c)
             return cremona_letter_code(c)
+
         jump_box = "%s.%s.%s" % (g, q, "_".join(extended_code(cdict.get(i, 0)) for i in range(1, g+1)))
     return by_label(jump_box)
 

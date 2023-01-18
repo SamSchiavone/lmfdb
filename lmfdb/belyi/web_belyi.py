@@ -21,31 +21,32 @@ geomtypelet_to_geomtypename_dict = {
 }
 
 
-def make_curve_latex(crv_str, nu = None):
+def make_curve_latex(crv_str, nu=None):
     if "nu" not in crv_str:
         R0 = QQ
     else:
         R0 = PolynomialRing(QQ, "nu")
     R = PolynomialRing(R0, 2, "x,y")
-    #F = FractionField(R)
+    # F = FractionField(R)
     sides = crv_str.split("=")
     lhs = R(sides[0])
     rhs = R(sides[1])
     if nu and ("nu" in crv_str):
-       S = PolynomialRing(CC , 2, 'x,y')
-       # evaluate at nu, if given
-       new_lhs = dict()
-       new_rhs = dict()
-       for m, c in lhs.dict().items():
-           new_lhs[m] = c.subs(nu=nu)
-       for m, c in rhs.dict().items():
-           new_rhs[m] = c.subs(nu=nu)
-       lhs = S(new_lhs) # R, or something else, like CC[]?
-       rhs = S(new_rhs)
+        S = PolynomialRing(CC, 2, 'x,y')
+        # evaluate at nu, if given
+        new_lhs = {}
+        new_rhs = {}
+        for m, c in lhs.dict().items():
+            new_lhs[m] = c.subs(nu=nu)
+        for m, c in rhs.dict().items():
+            new_rhs[m] = c.subs(nu=nu)
+        lhs = S(new_lhs)  # R, or something else, like CC[]?
+        rhs = S(new_rhs)
     eqn_str = latex(lhs) + "=" + latex(rhs)
     return eqn_str
 
-def make_map_latex(map_str, nu = None):
+
+def make_map_latex(map_str, nu=None):
     if "nu" not in map_str:
         R0 = QQ
     else:
@@ -84,14 +85,14 @@ def make_map_latex(map_str, nu = None):
     den_new = den_new / den_gcd
     # evaluate at nu, if given
     if nu and ("nu" in map_str):
-        S = PolynomialRing(CC , 2, 'x,y')
+        S = PolynomialRing(CC, 2, 'x,y')
         lc = lc.subs(nu=nu)
-        num_dict = dict()
-        den_dict = dict()
+        num_dict = {}
+        den_dict = {}
         for m, c in num_new.dict().items():
-           num_dict[m] = c.subs(nu=nu)
+            num_dict[m] = c.subs(nu=nu)
         for m, c in den_new.dict().items():
-           den_dict[m] = c.subs(nu=nu)
+            den_dict[m] = c.subs(nu=nu)
         num_new = S(num_dict)
         den_new = S(den_dict)
     # make strings for lc, num, and den
@@ -125,7 +126,7 @@ def belyi_base_field(galmap):
     return F
 
 
-class WebBelyiGalmap(object):
+class WebBelyiGalmap():
     """
     Class for a Belyi map.  Attributes include:
         data -- information about the map to be displayed
@@ -146,9 +147,9 @@ class WebBelyiGalmap(object):
         """
         try:
             slabel = label.split("-")
-            if len(slabel) == 2: # passport label length
+            if len(slabel) == 2:  # passport label length
                 galmap = db.belyi_galmaps_fixed.lucky({"plabel": label})
-            elif len(slabel) == 3: # galmap label length
+            elif len(slabel) == 3:  # galmap label length
                 galmap = db.belyi_galmaps_fixed.lucky({"label": label})
             else:
                 raise ValueError("Invalid Belyi map label %s." % label)
@@ -207,10 +208,10 @@ class WebBelyiGalmap(object):
         data["embeddings_and_triples"] = []
         self.triple = None
         self.embedding = None
-        for i in range(0, len(data["triples_cyc"])):
+        for i in range(len(data["triples_cyc"])):
             my_dict = {}
             triple_str = ', '.join(data['triples_cyc'][i])
-            triple_link = triple_str.replace(' ','')
+            triple_link = triple_str.replace(' ', '')
             if triple_link == triple:
                 self.triple = data['triples_cyc'][i]
                 self.embedding = CC(data['embeddings'][i])
@@ -226,13 +227,14 @@ class WebBelyiGalmap(object):
         if crv_str == "PP1":
             data["curve"] = r"\mathbb{P}^1"
         else:
-            data["curve"] = make_curve_latex(crv_str, nu = self.embedding)
+            data["curve"] = make_curve_latex(crv_str, nu=self.embedding)
 
-        data["map"] = make_map_latex(galmap["map"], nu = self.embedding)
+        data["map"] = make_map_latex(galmap["map"], nu=self.embedding)
         data["lambdas"] = [str(c)[1:-1] for c in galmap["lambdas"]]
 
         # Properties
-        self.plot = db.belyi_galmap_portraits.lucky({"label": galmap['label']},projection="portrait")
+        self.plot = db.belyi_galmap_portraits.lucky({"label": galmap['label']},
+                                                    projection="portrait")
         plot_link = '<a href="{0}"><img src="{0}" width="200" height="200" style="background-color: white;"/></a>'.format(self.plot)
         properties = [("Label", galmap["label"])]
         if triple:
@@ -253,7 +255,7 @@ class WebBelyiGalmap(object):
             self.friends.append(("Primitivization", url_for_belyi_galmap_label(galmap["primitivization"])))
         self.friends.extend(names_and_urls(galmap['friends']))
 
-        #add curve link, if in LMFDB
+        # add curve link, if in LMFDB
         if 'curve_label' in galmap.keys():
             data['curve_label'] = galmap['curve_label']
             for name, url in self.friends:
@@ -344,7 +346,7 @@ class WebBelyiGalmap(object):
         return
 
 
-class WebBelyiPassport(object):
+class WebBelyiPassport():
     """
     Class for a Belyi passport.  Attributes include:
         data -- information about the map to be displayed

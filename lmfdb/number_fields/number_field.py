@@ -7,7 +7,7 @@ from io import BytesIO
 
 import time
 
-from flask import render_template, request, url_for, redirect, send_file, make_response, Markup
+from flask import abort, render_template, request, url_for, redirect, send_file, make_response, Markup
 from sage.all import ZZ, QQ, PolynomialRing, NumberField, latex, prime_range, RealField, log
 
 from lmfdb import db
@@ -15,16 +15,16 @@ from lmfdb.app import app
 from lmfdb.utils import (
     web_latex, to_dict, coeff_to_poly, pol_to_html, comma, format_percentage,
     flash_error, display_knowl, CountBox, prop_int_pretty,
-    SearchArray, TextBox, YesNoBox, SubsetNoExcludeBox, TextBoxWithSelect,
+    SearchArray, TextBox, YesNoBox, YesNoMaybeBox, SubsetNoExcludeBox,
+    SubsetBox, TextBoxWithSelect, parse_bool_unknown, parse_posints,
     clean_input, nf_string_to_label, parse_galgrp, parse_ints, parse_bool,
-    parse_posints,
     parse_signed_ints, parse_primes, parse_bracketed_posints, parse_nf_string,
     parse_floats, parse_subfield, search_wrap, parse_padicfields,
-    raw_typeset, raw_typeset_poly, flash_info, input_string_to_poly, 
+    raw_typeset, raw_typeset_poly, flash_info, input_string_to_poly,
     raw_typeset_int, compress_poly_Q)
 from lmfdb.utils.web_display import compress_int
 from lmfdb.utils.interesting import interesting_knowls
-from lmfdb.utils.search_columns import SearchColumns, SearchCol, CheckCol, MathCol, ProcessedCol, MultiProcessedCol
+from lmfdb.utils.search_columns import SearchColumns, SearchCol, CheckCol, MathCol, ProcessedCol, MultiProcessedCol, CheckMaybeCol
 from lmfdb.api import datapage
 from lmfdb.galois_groups.transitive_group import (
     cclasses_display_knowl,character_table_display_knowl,
@@ -34,11 +34,11 @@ from lmfdb.galois_groups.transitive_group import (
 from lmfdb.number_fields import nf_page, nf_logger
 from lmfdb.number_fields.web_number_field import (
     field_pretty, WebNumberField, nf_knowl_guts, factor_base_factor,
-    factor_base_factorization_latex, formatfield)
+    factor_base_factorization_latex, fake_label, formatfield)
 
 assert nf_logger
 
-bread_prefix = lambda: [('Number fields', url_for(".number_field_render_webpage"))]
+def bread_prefix(): return [('Number fields', url_for(".number_field_render_webpage"))]
 
 Completename = 'Completeness of the data'
 dnc = 'data not computed'
@@ -93,6 +93,10 @@ def fixed_prec(r, digs=3):
     print(head)
     return str(head) + '.' + n[-digs:]
 
+@app.context_processor
+def ctx_raw_typeset():
+    return {'raw_typeset': raw_typeset}
+
 
 @app.context_processor
 def ctx_galois_groups():
@@ -140,7 +144,7 @@ def source():
     bread = bread_prefix() + [('Source', ' ')]
     return render_template("multi.html", kids=['rcs.source.nf',
                                                'rcs.ack.nf',
-                                               'rcs.ack.nf'],
+                                               'rcs.cite.nf'],
         title=t, bread=bread, learnmore=learnmore)
 
 
@@ -210,7 +214,7 @@ def render_class_group_data():
         if info['filenamebase'] in ['cl3mod8', 'cl7mod8', 'cl4mod16', 'cl8mod16']:
             filepath = "%s/%s/%s.%d.gz" % (class_group_data_directory,info['filenamebase'],info['filenamebase'],k)
             if os.path.isfile(filepath) and os.access(filepath, os.R_OK):
-                return send_file(filepath, as_attachment=True, add_etags=False)
+                return send_file(filepath, as_attachment=True)
             else:
                 info['message'] = 'File not found'
                 return class_group_request_error(info, bread)
@@ -446,7 +450,7 @@ def render_field_webpage(args):
     if D.abs().is_prime() or D == 1:
         data['discriminant'] = raw_typeset_int(D)
     else:
-        data['discriminant'] = raw_typeset_int(D, extra= r"\(\medspace = %s\)" % data['disc_factor'])
+        data['discriminant'] = raw_typeset_int(D, extra=r"\(\medspace = %s\)" % data['disc_factor'])
     if nf.frobs():
         data['frob_data'], data['seeram'] = see_frobs(nf.frobs())
     else:  # fallback in case we haven't computed them in a case
@@ -505,6 +509,39 @@ def render_field_webpage(args):
     #ram_primes = ram_primes.replace('L', '')
     if not ram_primes:
         ram_primes = r'\textrm{None}'
+    if nf.is_cm_field():
+        # Reflex fields table
+        table = ""
+        reflex_fields = db.nf_fields_reflex.search({"nf_label" : label})
+        reflex_fields_list = []
+        field_labels_dict = dict()
+        for reflex_field in reflex_fields:
+            if len(reflex_field['rf_coeffs']) > 1:
+                reflex_fields_list.append(['', reflex_field['rf_coeffs'], reflex_field['multiplicity']])
+                field_labels_dict[tuple(reflex_field['rf_coeffs'])] = "N/A"
+        field_labels = db.nf_fields.search({"$or":[{"coeffs" : a[1]} for a in reflex_fields_list]}, ["label", "coeffs"])
+        for field in field_labels:
+            field_labels_dict[tuple(field["coeffs"])] = field["label"]
+        for reflex_field in reflex_fields_list:
+            reflex_field[0] = fake_label(field_labels_dict[tuple(reflex_field[1])], reflex_field[1])
+        total = 2 ** (nf.degree()//2 - 1)
+        reflex_fields_list.sort()
+        print(reflex_fields_list)
+        for reflex_field in reflex_fields_list:
+            if table != "":
+                table = table + ', '
+            if field_labels_dict[tuple(reflex_field[1])] == "N/A":
+                table = table + formatfield(reflex_field[1], data={'label' : field_labels_dict[tuple(reflex_field[1])]})
+            else:
+                table = table + formatfield(reflex_field[1], data={'label' : field_labels_dict[tuple(reflex_field[1])]})
+            if reflex_field[2] > 1:
+                table = table + '$^{' + str(reflex_field[2]) + '}$'
+            total = total - reflex_field[2]
+        if total > 0:
+            if table != "":
+                table = table + ', '
+            table = table + 'unavailable$^{' + str(total) + '}$'
+        data['reflex_fields'] = table
     data['phrase'] = group_phrase(n, t)
     zkraw = nf.zk()
     zk = [compress_poly_Q(x, 'a') for x in zkraw]
@@ -527,7 +564,7 @@ def render_field_webpage(args):
         extra='&nbsp;(order ${}$)'.format(nf.root_of_1_order()))
 
     myunits = nf.units()
-    if 'not' not in myunits: 
+    if 'not' not in myunits:
         myunits = [unlatex(z) for z in myunits]
         Ra = PolynomialRing(QQ,'a')
         myunits = [Ra(z) for z in myunits]
@@ -551,7 +588,10 @@ def render_field_webpage(args):
         'fund_units': myunits,
         'cnf': nf.cnf(),
         'grh_label': grh_label,
-        'loc_alg': loc_alg
+        'loc_alg': loc_alg,
+        'monogenic': nf.monogenic(),
+        'index': nf.index(),
+        'inessential': nf.inessentialp()
     })
 
     bread.append(('%s' % nf_label_pretty(info['label_raw']), ' '))
@@ -705,6 +745,8 @@ def by_label(label):
 
 @nf_page.route("/data/<label>")
 def nf_datapage(label):
+    if not FIELD_LABEL_RE.fullmatch(label):
+        return abort(404, f"Invalid label {label}")
     title = f"Number field data - {label}"
     bread = bread_prefix() + [(label, url_for(".by_label", label=label)), ("Data", " ")]
     return datapage(label, "nf_fields", title=title, bread=bread)
@@ -785,9 +827,8 @@ def download_search(info):
     strIO.write(s.encode('utf-8'))
     strIO.seek(0)
     return send_file(strIO,
-                     attachment_filename=filename,
-                     as_attachment=True,
-                     add_etags=False)
+                     download_name=filename,
+                     as_attachment=True)
 
 
 def number_field_jump(info):
@@ -824,14 +865,15 @@ nf_columns = SearchColumns([
     MathCol("disc", "nf.discriminant", "Discriminant", default=True, align="left"),
     MathCol("num_ram", "nf.ramified_primes", "Ram. prime count", short_title="ramified prime count"),
     MathCol("rd", "nf.root_discriminant", "Root discriminant"),
-    CheckCol("cm", "nf.cm_field", "Is CM field?"),
-    CheckCol("is_galois", "nf.galois_group", "Is Galois?"),
+    CheckCol("cm", "nf.cm_field", "CM field"),
+    CheckCol("is_galois", "nf.galois_group", "Galois"),
+    CheckMaybeCol("monogenic", "nf.monogenic", "Monogenic"),
     SearchCol("galois", "nf.galois_group", "Galois group", default=True),
     SearchCol("class_group_desc", "nf.ideal_class_group", "Class group", default=True),
     MathCol("torsion_order", "nf.unit_group", "Unit group torsion", align="center"),
     MultiProcessedCol("unit_rank", "nf.rank", "Unit group rank", ["r2", "degree"], lambda r2, degree: degree - r2 + - 1, align="center", mathmode=True),
     MathCol("regulator", "nf.regulator", "Regulator", align="left")],
-    db_cols=["class_group", "coeffs", "degree", "r2", "disc_abs", "disc_sign", "galois_label", "label", "ramps", "used_grh", "cm", "is_galois", "torsion_order", "regulator", "rd"])
+    db_cols=["class_group", "coeffs", "degree", "r2", "disc_abs", "disc_sign", "galois_label", "label", "ramps", "used_grh", "cm", "is_galois", "torsion_order", "regulator", "rd", "monogenic", "num_ram"])
 
 def nf_postprocess(res, info, query):
     galois_labels = [rec["galois_label"] for rec in res if rec.get("galois_label")]
@@ -874,7 +916,11 @@ def number_field_search(info, query):
     parse_primes(info,query,'ram_primes',name='Ramified primes',
                  qfield='ramps',mode=info.get('ram_quantifier'),radical='disc_rad',cardinality='num_ram')
     parse_subfield(info, query, 'subfield', qfield='subfields', name='Intermediate field')
-    parse_padicfields(info, query, 'completions', qfield='local_algs', name='$p$-adic completions')
+    parse_padicfields(info, query, 'completions', qfield='local_algs', name='$p$-adic completions', flag_unramified=True)
+    parse_bool_unknown(info,query,'monogenic')
+    parse_posints(info,query,'index')
+    parse_primes(info,query,'inessentialp',name='Inessential primes',
+                 qfield='inessentialp', mode=info.get('inessential_quantifier'))
     info['wnf'] = WebNumberField.from_data
     info['gg_display'] = group_pretty_and_nTj
 
@@ -899,9 +945,8 @@ def residue_field_degrees_function(nf):
 def see_frobs(frob_data):
     ans = []
     seeram = False
-    plist = [p for p in prime_range(2, 60)]
-    for i in range(len(plist)):
-        p = plist[i]
+    plist = prime_range(2, 60)
+    for i, p in enumerate(plist):
         dec = frob_data[i][1]
         if dec[0] == 0:
             ans.append([p, 'R'])
@@ -912,7 +957,7 @@ def see_frobs(frob_data):
             for j in dec:
                 if not firstone:
                     s += r'{,}\,'
-                if j[0]<15:
+                if j[0] < 15:
                     s += r'{\href{%s}{%d} }'%(url_for('local_fields.by_label',
                         label="%d.%d.0.1"%(p,j[0])), j[0])
                 else:
@@ -969,7 +1014,7 @@ def unlatex(s):
     s = re.sub(r'\\frac{(.+?)}{(.+?)}', r'(\1)/(\2)', s)
     s = s.replace(r'{',r'(')
     s = s.replace(r'}',r')')
-    s = re.sub(r'([^\s+,-])\s*a', r'\1*a',s)
+    s = re.sub(r'([^\s+,*-])\s*a', r'\1*a',s)
     return s
 
 
@@ -995,8 +1040,6 @@ def nf_data(**args):
     Ra = PolynomialRing(QQ, 'a')
     zk = [str(Ra(x)) for x in zk]
     zk = ', '.join(zk)
-    units = str(unlatex(nf.units()))
-    units = units.replace('&nbsp;', ' ')
     subs = nf.subfields()
     subs = [[coeff_to_poly(string2list(z[0])),z[1]] for z in subs]
 
@@ -1010,6 +1053,7 @@ def nf_data(**args):
     data += '[%s], '%zk
     data += '%s, '%str(1 if nf.is_cm_field() else 0)
     if nf.can_class_number():
+        units = ','.join(unlatex(z) for z in nf.units())
         data += '%s, '%nf.class_number()
         data += '%s, '%nf.class_group_invariants_raw()
         data += '%s, '%(1 if nf.used_grh() else 0)
@@ -1064,6 +1108,7 @@ def nf_code(**args):
             code += nf.code[k][lang] + ('\n' if '\n' not in nf.code[k][lang] else '')
     return code
 
+
 class NFSearchArray(SearchArray):
     noun = "field"
     plural_noun = "fields"
@@ -1079,6 +1124,7 @@ class NFSearchArray(SearchArray):
     jump_egspan = r"e.g. 2.2.5.1, Qsqrt5, x^2-5, or x^2-x-1 for \(\Q(\sqrt{5})\)"
     jump_knowl = "nf.search_input"
     jump_prompt = "Label, name, or polynomial"
+
     def __init__(self):
         degree = TextBox(
             name="degree",
@@ -1155,8 +1201,8 @@ class NFSearchArray(SearchArray):
             name="subfield",
             label="Intermediate field",
             knowl="nf.intermediate_fields",
-            example_span="2.2.5.1 or x^2-5 or a "+
-                display_knowl("nf.nickname", "field nickname"),
+            example_span="2.2.5.1 or x^2-5 or a "
+                + display_knowl("nf.nickname", "field nickname"),
             example="x^2-5")
         completion = TextBox(
             name="completions",
@@ -1164,6 +1210,26 @@ class NFSearchArray(SearchArray):
             knowl="nf.padic_completion.search",
             example_span="2.4.10.7 or 2.4.10.7,3.2.1.2",
             example="2.4.10.7")
+        monogenic = YesNoMaybeBox(
+            name="monogenic",
+            label="Monogenic",
+            knowl="nf.monogenic")
+        index = TextBox(
+            name="index",
+            label="Index",
+            knowl="nf.zk_index",
+            example='2')
+        inessential_quantifier = SubsetBox(
+            name="inessential_quantifier",
+            min_width=115,
+        )
+        inessentialprimes = TextBoxWithSelect(
+            name="inessentialp",
+            label="Inessential primes",
+            short_label=r'Ines. \(p\)',
+            knowl="nf.inessential_prime",
+            select_box=inessential_quantifier,
+            example="2,3")
         count = CountBox()
 
         self.browse_array = [
@@ -1174,9 +1240,12 @@ class NFSearchArray(SearchArray):
             [num_ram, cm_field],
             [ram_primes, ur_primes],
             [regulator, subfield],
-            [count, completion]]
+            [completion, monogenic],
+            [index, inessentialprimes],
+            [count]]
 
         self.refine_array = [
             [degree, signature, class_number, class_group, cm_field],
             [num_ram, ram_primes, ur_primes, gal, is_galois],
-            [discriminant, rd, regulator, subfield, completion]]
+            [discriminant, rd, regulator, subfield, completion],
+            [monogenic, index, inessentialprimes]]

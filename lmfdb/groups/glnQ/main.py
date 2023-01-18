@@ -32,10 +32,10 @@ def learnmore_list_remove(matchstring):
     return filter(lambda t:t[0].find(matchstring) <0, learnmore_list())
 
 def sub_label_is_valid(lab):
-    return abstract_subgroup_label_regex.match(lab)
+    return abstract_subgroup_label_regex.fullmatch(lab)
 
 def label_is_valid(lab):
-    return glnq_label_regex.match(lab)
+    return glnq_label_regex.fullmatch(lab)
 
 def get_bread(breads=[]):
     bc = [("Groups", url_for(".index")),("GLnQ", url_for(".index"))]
@@ -54,7 +54,6 @@ def index():
     return render_template("glnQ-index.html", title=r"Finite subgroups of $\GL(n,\Q)$", bread=bread, info=info, learnmore=learnmore_list(), credit=credit_string)
 
 
-
 @glnQ_page.route("/random")
 def random_glnQ_group():
     label = db.gps_qrep.random(projection='label')
@@ -70,18 +69,21 @@ def by_label(label):
         return redirect(url_for(".index"))
 #Should this be "Bad label instead?"
 
+
 # Take a list of list of integers and make a latex matrix
 def dispmat(mat):
     s = r'\begin{pmatrix}'
     for row in mat:
-      rw = '& '.join([str(z) for z in row])
-      s += rw + '\\\\'
+        rw = '& '.join([str(z) for z in row])
+        s += rw + '\\\\'
     s += r'\end{pmatrix}'
     return s
+
 
 #### Searching
 def group_jump(info):
     return redirect(url_for('.by_label', label=info['jump']))
+
 
 def group_download(info):
     t = 'Stub'
@@ -142,7 +144,7 @@ def render_glnQ_group(args):
 
         title = r'$\GL('+str(info['dim'])+r',\Q)$ subgroup '  + label
 
-        prop = [('Label', '%s' %  label),
+        prop = [('Label', '%s' % label),
                 ('Order', r'\(%s\)' % info['order']),
                 ('Dimension', '%s' % info['dim']) ]
 
@@ -206,6 +208,7 @@ class GLnQSearchArray(SearchArray):
     plural_noun = "groups"
     jump_example = "??"
     jump_egspan = "e.g. ??"
+
     def __init__(self):
         order = TextBox(
             name="order",
@@ -226,4 +229,3 @@ class GLnQSearchArray(SearchArray):
             [count]]
         self.refine_array = [
             [order, dim]]
-

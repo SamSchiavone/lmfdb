@@ -9,6 +9,7 @@ from sage.all import (
     factor,
     PolynomialRing,
     TermOrder,
+    matrix
 )
 from . import coeff_to_poly
 ################################################################################
@@ -41,7 +42,6 @@ def raw_typeset(raw, typeset='', extra='', compressed=False):
     # clean white space
     raw = re.sub(r'\s+', ' ', str(raw).strip())
     raw = f'<textarea rows="1" cols="{len(raw)}" class="raw-container">{raw}</textarea>'
-
 
     # the doublesclick behavior is set on load in javascript
     out = f"""
@@ -149,7 +149,8 @@ def make_bigint(s, cutoff=20, max_width=70):
 
     The string ``s`` with integers at least 10^cutoff replaced by bigint_knowls.
     """
-    Zmatcher = re.compile(r'([0-9]{%s,})' % (cutoff+1))
+    Zmatcher = re.compile(r'([0-9]{%s,})' % (cutoff + 1))
+
     def knowl_replacer(M):
         a = bigint_knowl(int(M.group(1)), cutoff, max_width=max_width)
         if a[0:2] == r'<a':
@@ -220,9 +221,6 @@ def polyquo_knowl(f, disc=None, unit=1, cutoff=None):
         else:
             long += '\n<br>\nDiscriminant: \\(%s\\)' % (Factorization(disc, unit=unit)._latex_())
     return r'<a title="[poly]" knowl="dynamic_show" kwargs="%s">\(%s\)</a>'%(long, short)
-
-
-
 
 
 def web_latex_factored_integer(x, enclose=True, equals=False):
@@ -304,11 +302,11 @@ def web_latex_split_on_pm(x):
         A = r"\( %s \)" % latex(x)
 
        # need a more clever split_on_pm that inserts left and right properly
-    A = A.replace(r"\left","")
-    A = A.replace(r"\right","")
+    A = A.replace(r"\left", "")
+    A = A.replace(r"\right", "")
     for s in on:
-  #      A = A.replace(s, r'\) ' + s + r' \( ')
-   #     A = A.replace(s, r'\) ' + r' \( \mathstrut ' + s )
+        # A = A.replace(s, r'\) ' + s + r' \( ')
+        # A = A.replace(s, r'\) ' + r' \( \mathstrut ' + s )
         A = A.replace(s, r'\)' + r' \(\mathstrut ' + s + r'\mathstrut ')
     # the above will be re-done using a more sophisticated method involving
     # regular expressions.  Below fixes bad spacing when the current approach
@@ -325,7 +323,8 @@ def web_latex_split_on_pm(x):
     return A
     # return web_latex_split_on(x)
 
-def web_latex_split_on_re(x, r = '(q[^+-]*[+-])'):
+
+def web_latex_split_on_re(x, r='(q[^+-]*[+-])'):
     r"""
     Convert input into a latex string, with splits into separate latex strings
     occurring on given regex `r`.
@@ -364,7 +363,6 @@ def web_latex_split_on_re(x, r = '(q[^+-]*[+-])'):
     A = A.replace(r'( ', r'(')
     A = A.replace(r'+\) \(O', r'+O')
     return A
-
 
 
 def compress_polynomial(poly, threshold, decreasing=True):
@@ -474,10 +472,10 @@ def raw_typeset_poly(coeffs,
         denominatortset = f"/ {compress_int(denominator)[0]}"
 
     if compress_poly:
-            tset = compress_polynomial(
-                poly,
-                compress_threshold - len(denominatortset),
-                decreasing)
+        tset = compress_polynomial(
+            poly,
+            compress_threshold - len(denominatortset),
+            decreasing)
     else:
         if decreasing:
             tset = latex(poly)
@@ -502,7 +500,6 @@ def raw_typeset_poly(coeffs,
 
     if final_rawvar:
         raw = raw.replace(var, final_rawvar)
-
 
     return raw_typeset(raw, rf'\( {tset} \)', compressed=r'\cdots' in tset, **kwargs)
 
@@ -550,7 +547,6 @@ def raw_typeset_qexp(coeffs_list,
 
     rawvar = var.lstrip("\\")
     R = PolynomialRing(ZZ, rawvar)
-
 
     def rawtset_coeff(i, coeffs):
         poly = R(coeffs)
@@ -641,23 +637,22 @@ def compress_poly_Q(rawpoly,
         return r'\frac{%s}{%s}'%(compress_int(frac.numerator())[0], compress_int(frac.denominator())[0])
 
     tset = ''
-    for j in range(1,d+1):
-        csign = coefflist[d-j].sign()
+    for j in range(1, d + 1):
+        csign = coefflist[d - j].sign()
         if csign:
-            cabs = coefflist[d-j].abs()
-            if csign>0:
+            cabs = coefflist[d - j].abs()
+            if csign > 0:
                 tset += '+'
             else:
                 tset += '-'
-            if cabs != 1 or d-j==0:
+            if cabs != 1 or d == j:
                 tset += frac_string(cabs)
-            if d-j>0:
-                if d-j == 1:
+            if d > j:
+                if d - j == 1:
                     tset += var
                 else:
-                    tset += r'%s^{%s}'%(var,d-j)
+                    tset += r'%s^{%s}' % (var, d - j)
     return tset[1:]
-
 
 
 # copied here from hilbert_modular_forms.hilbert_modular_form as it
@@ -689,9 +684,6 @@ def teXify_pol(pol_str):  # TeXify a polynomial (or other string containing poly
     return o_str
 
 
-
-
-
 def to_ordinal(n):
     a = (n % 100) // 10
     if a == 1:
@@ -705,7 +697,6 @@ def to_ordinal(n):
         return '%srd' % n
     else:
         return '%sth' % n
-
 
 
 def add_space_if_positive(texified_pol):
@@ -730,19 +721,18 @@ def sparse_cyclotomic_to_latex(n, dat):
     and return sum_{j=1}^k cj zeta_n^ej in latex form as it is given
     (converting to sage will rewrite the element in terms of a basis)
     """
-
     dat.sort(key=lambda p: p[1])
-    ans=''
+    ans = ''
     z = r'\zeta_{%d}' % n
     for p in dat:
         if p[0] == 0:
             continue
-        if p[1]==0:
+        if p[1] == 0:
             if p[0] == 1 or p[0] == -1:
                 zpart = '1'
             else:
                 zpart = ''
-        elif p[1]==1:
+        elif p[1] == 1:
             zpart = z
         else:
             zpart = z+r'^{'+str(p[1])+'}'
@@ -760,25 +750,24 @@ def sparse_cyclotomic_to_latex(n, dat):
     return ans
 
 
-
 def dispZmat(mat):
     r""" Display a matrix with integer entries
     """
     s = r'\begin{pmatrix}'
     for row in mat:
-      rw = '& '.join([str(z) for z in row])
-      s += rw + '\\\\'
+        rw = '& '.join(str(z) for z in row)
+        s += rw + '\\\\'
     s += r'\end{pmatrix}'
     return s
 
-def dispcyclomat(n,mat):
+
+def dispcyclomat(n, mat):
     s = r'\begin{pmatrix}'
     for row in mat:
-      rw = '& '.join([sparse_cyclotomic_to_latex(n,z) for z in row])
-      s += rw + '\\\\'
+        rw = '& '.join(sparse_cyclotomic_to_latex(n, z) for z in row)
+        s += rw + '\\\\'
     s += r'\end{pmatrix}'
     return s
-
 
 
 def list_to_latex_matrix(li):
@@ -791,8 +780,18 @@ def list_to_latex_matrix(li):
     '\\left(\\begin{array}{rr}1 & 0\\\\0 & 1\\end{array}\\right)'
     """
     dim = len(li[0])
-    mm = r"\left(\begin{array}{"+dim*"r" +"}"
-    mm += r"\\".join([" & ".join([str(a) for a in row]) for row in li])
+    mm = r"\left(\begin{array}{" + dim * "r" + "}"
+    mm += r"\\".join(" & ".join(str(a) for a in row) for row in li)
     mm += r'\end{array}\right)'
     return mm
 
+
+def dispZmat_from_list(a_list, dim):
+    r"""Display a matrix with integer entries from a list
+    """
+    num_entries = len(a_list)
+    assert num_entries == dim ** 2
+    output = []
+    for i in range(0,dim**2,dim):
+        output.append(a_list[i:i+dim])
+    return matrix(output)

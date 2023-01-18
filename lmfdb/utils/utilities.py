@@ -44,11 +44,13 @@ def integer_divisors(n):
     """ returns sorted list of positive divisors of the integer n (uses factor rather than calling pari like sage 9.3+ does) """
     if not n:
         raise ValueError("n must be nonzero")
+
     def _divisors(a):
         if len(a) == 0:
             return [1]
         q = a[0]
-        return sum([[q[0]**e*n for n in _divisors(a[1:])] for e in range(0,q[1]+1)],[])
+        return sum([[q[0]**e*n for n in _divisors(a[1:])] for e in range(q[1]+1)],[])
+
     return sorted(_divisors(ZZ(n).factor()))
 
 def integer_prime_divisors(n):
@@ -251,6 +253,24 @@ def coeff_to_poly(c, var=None):
         var = 'x'
     return PolynomialRing(QQ, var)(c)
 
+
+def coeff_to_poly_multi(c, var=None):
+    """
+    Convert a list or string representation of a polynomial to a sage polynomial.
+    Handles multivariate polynomials.
+    """
+    if isinstance(c, str):
+        # accept latex
+        c = c.replace("{", "").replace("}", "")
+        while re.search("[A-Za-z]{2}", c):
+            c = re.sub("([A-Za-z])([A-Za-z])", r"\1*\2", c)
+        while re.search("[0-9]+[A-Za-z]", c):
+            c = re.sub("([0-9]+)([A-Za-z])", r"\1*\2", c)
+        # autodetect variable name
+        if var is None:
+            varposs = set(re.findall(r"[A-Za-z_]+", c))
+    return PolynomialRing(QQ, list(varposs))(c)
+
 def coeff_to_power_series(c, var='q', prec=None):
     """
     Convert a list or dictionary giving coefficients to a sage power series.
@@ -260,12 +280,14 @@ def coeff_to_power_series(c, var='q', prec=None):
 def display_multiset(mset, formatter=str, *args):
     """
     Input mset is a list of pairs [item, multiplicity]
+
     Return a string for display of the multi-set.  The
     function formatter is a function whose first argument
-    is the item, and *args are the other arguments
+    is the item, and ``*args`` are the other arguments
     and is applied to each item.
 
     Example:
+
     >>> display_multiset([["a", 5], [1, 3], ["cat", 2]])
     'a x5, 1 x3, cat x2'
     """
@@ -352,7 +374,7 @@ def str_to_CBF(s):
         if a:
             res += CBF(a)
         if b:
-            res  +=  sign * CBF(b)* CBF.gens()[0]
+            res  += sign * CBF(b)* CBF.gens()[0]
         return res
 
 # Conversion from numbers to letters and back
@@ -376,7 +398,7 @@ def num2letters(n):
         return num2letters(int((n-1)/26))+chr(97+(n-1)%26)
 
 
-def to_dict(args, exclude = [], **kwds):
+def to_dict(args, exclude=[], **kwds):
     r"""
     Input a dictionary `args` whose values may be lists.
     Output a dictionary whose values are not lists, by choosing the last
@@ -408,7 +430,7 @@ def is_exact(x):
     return isinstance(x, int) or (isinstance(x, Element) and x.parent().is_exact())
 
 
-def display_float(x, digits, method = "truncate",
+def display_float(x, digits, method="truncate",
                              extra_truncation_digits=3,
                              try_halfinteger=True,
                              no_sci=None,
@@ -422,7 +444,7 @@ def display_float(x, digits, method = "truncate",
             if len(s) < digits + 2: # 2 = '/' + '-'
                 return str(x)
         k = round_to_half_int(x)
-        if k == x :
+        if k == x:
             k2 = None
             try:
                 k2 = ZZ(2*x)
@@ -442,10 +464,10 @@ def display_float(x, digits, method = "truncate",
     if no_sci is None:
         no_sci = 'e' not in "%.{}g".format(digits) % float(x)
     try:
-        s = RealField(max(53,4*digits),  rnd=rnd)(x).str(digits=digits, no_sci=no_sci)
+        s = RealField(max(53, 4 * digits), rnd=rnd)(x).str(digits=digits, no_sci=no_sci)
     except TypeError:
         # older versions of Sage don't support the digits keyword
-        s = RealField(max(53,4*digits),  rnd=rnd)(x).str(no_sci=no_sci)
+        s = RealField(max(53, 4 * digits), rnd=rnd)(x).str(no_sci=no_sci)
         point = s.find('.')
         if point != -1:
             if point < digits:
@@ -456,8 +478,9 @@ def display_float(x, digits, method = "truncate",
         s = s.replace("e", r"\times 10^{") + "}"
     return s
 
-def display_complex(x, y, digits, method = "truncate",
-                                  parenthesis = False,
+
+def display_complex(x, y, digits, method="truncate",
+                                  parenthesis=False,
                                   extra_truncation_digits=3,
                                   try_halfinteger=True):
     """
@@ -505,8 +528,8 @@ def display_complex(x, y, digits, method = "truncate",
             sign = ""
         else:
             sign = " + "
-    y = display_float(y, digits, method = method,
-                                 extra_truncation_digits = extra_truncation_digits,
+    y = display_float(y, digits, method=method,
+                                 extra_truncation_digits=extra_truncation_digits,
                                  try_halfinteger=try_halfinteger)
     if y == "1":
         y = ""
@@ -532,13 +555,15 @@ def round_to_half_int(num, fraction=2):
     """
     return round(num * 1.0 * fraction) / fraction
 
+
 def splitcoeff(coeff):
-    """
+    r"""
     Return a list of list-represented complex numbers given a string of the
     form "r0 i0 \n r1 i1 \n r2 i2", where r0 is the real part of the 0th number
     and i0 is the imaginary part of the 0th number, and so on.
 
     Example:
+
     >>> splitcoeff("1 1 \n -1 2")
     [[1.0, 1.0], [-1.0, 2.0]]
     """
@@ -548,7 +573,6 @@ def splitcoeff(coeff):
         if s:
             answer.append(pair2complex(s))
     return answer
-
 
 
 ################################################################################
@@ -621,7 +645,6 @@ def factor_base_factor(n, fb):
     return [[p, valuation(n,p)] for p in fb]
 
 
-
 def code_snippet_knowl(D, full=True):
     r"""
     INPUT:
@@ -660,25 +683,25 @@ def code_snippet_knowl(D, full=True):
     return u'<a title="[code]" knowl="dynamic_show" pretext="%s" kwargs="%s">%s</a>' % (code, inner, label)
 
 
-
-
 ################################################################################
 #  pagination utilities
 ################################################################################
 
-class ValueSaver(object):
+class ValueSaver():
     """
     Takes a generator and saves values as they are generated so that values can be retrieved multiple times.
     """
     def __init__(self, source):
         self.source = source
         self.store = []
+
     def fill(self, stop):
         """
         Consumes values from the source until there are at least ``stop`` entries in the store.
         """
         if stop > len(self.store):
             self.store.extend(islice(self.source, stop - len(self.store)))
+
     def __getitem__(self, i):
         if isinstance(i, slice):
             if (i.start is not None and i.start < 0) or i.stop is None or i.stop < 0 or (i.step is not None and i.step < 0):
@@ -688,10 +711,12 @@ class ValueSaver(object):
         else:
             self.fill(i+1)
             return self.store[i]
+
     def __len__(self):
         raise TypeError("Unknown length")
 
-class Pagination(object):
+
+class Pagination():
     """
     INPUT:
 
@@ -717,7 +742,7 @@ class Pagination(object):
 
     @cached_property
     def entries(self):
-        return self.source[self.start : self.start+self.per_page]
+        return self.source[self.start: self.start+self.per_page]
 
     @cached_property
     def has_next(self):
@@ -784,12 +809,12 @@ def flash_info(errmsg, *args):
 ################################################################################
 
 # LinkedList is used in Ajax below
-class LinkedList(object):
+class LinkedList():
     __slots__ = ('value', 'next', 'timestamp')
 
-    def __init__(self, value, next):
+    def __init__(self, value, nxt):
         self.value = value
-        self.next = next
+        self.next = nxt
         self.timestamp = time.time()
 
     def append(self, value):
@@ -797,7 +822,7 @@ class LinkedList(object):
         return self.next
 
 
-class AjaxPool(object):
+class AjaxPool():
     def __init__(self, size=1e4, expiration=3600):
         self._size = size
         self._key_list = self._head = LinkedList(None, None)
@@ -892,8 +917,10 @@ def ajax_more(callback, *arg_list, **kwds):
     else:
         return res
 
+
 def image_src(G):
     return ajax_url(image_callback, G, _ajax_sticky=True)
+
 
 def image_callback(G):
     P = G.plot()
@@ -905,7 +932,8 @@ def image_callback(G):
     response.headers['Content-type'] = 'image/png'
     return response
 
-def encode_plot(P, pad=None, pad_inches=0.1, bbox_inches=None, remove_axes = False, transparent=False, axes_pad=None):
+
+def encode_plot(P, pad=None, pad_inches=0.1, bbox_inches=None, remove_axes=False, transparent=False, axes_pad=None):
     """
     Convert a plot object to base64-encoded png format.
 

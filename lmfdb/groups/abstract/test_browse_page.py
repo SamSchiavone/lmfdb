@@ -18,7 +18,6 @@ class AbGpsHomeTest(LmfdbTest):
     #  def test_stats_page(self):
     #  self.check_args("/Groups/Abstract/stats","Abstract groups: Statistics")
 
- 
     def test_completeness_page(self):
         r"""
         Check that Groups/Abstract/Completeness works
@@ -78,7 +77,6 @@ class AbGpsHomeTest(LmfdbTest):
         self.check_args("/Groups/Abstract/?order=8", "8.1")
         self.check_args("/Groups/Abstract/?order=8", "8.3")
 
-
     def test_search_exponent(self):
         r"""
         Check that we can search by exponent
@@ -102,7 +100,6 @@ class AbGpsHomeTest(LmfdbTest):
         # check that 7.1  and 18.2 show up as having 6.2 as aut. group
         self.check_args("/Groups/Abstract/?aut_group=6.2", "7.1")
         self.check_args("/Groups/Abstract/?aut_group=6.2", "18.2")
-
 
     def test_search_autgroup_order(self):
         r"""
@@ -128,7 +125,6 @@ class AbGpsHomeTest(LmfdbTest):
         self.check_args("/Groups/Abstract/?commutator_label=8.1", "32.20")
         self.check_args("/Groups/Abstract/?commutator_label=8.1", "64.190")
 
-
     def test_search_centralquot(self):
         r"""
         Check that we can search by central quotients
@@ -137,7 +133,6 @@ class AbGpsHomeTest(LmfdbTest):
         # with central quotient 4.2
         self.check_args("/Groups/Abstract/?central_quotient=4.2", "40.10")
         self.check_args("/Groups/Abstract/?central_quotient=4.2", "64.87")
-
 
     def test_search_abelianization(self):
         r"""
@@ -156,7 +151,6 @@ class AbGpsHomeTest(LmfdbTest):
         self.not_check_args("/Groups/Abstract/?order=12&abelian=no", "12.5")
         self.not_check_args("/Groups/Abstract/?order=12&abelian=yes", "12.4")
 
-
     def test_cyclic_search(self):
         r"""
         Check that we can restrict to cyclic or non-cyclic groups only
@@ -165,7 +159,6 @@ class AbGpsHomeTest(LmfdbTest):
         self.check_args("/Groups/Abstract/?order=24&cyclic=no", "24.3")
         self.not_check_args("/Groups/Abstract/?order=24&cyclic=yes", "24.4")
         self.not_check_args("/Groups/Abstract/?order=24&cyclic=no", "24.2")
-
 
     def test_simple_search(self):
         r"""
@@ -176,9 +169,9 @@ class AbGpsHomeTest(LmfdbTest):
         self.not_check_args("/Groups/Abstract/?simple=no", "29.1")
         self.not_check_args("/Groups/Abstract/?simple=yes", "18.4")
 
+    # when the test was first written 60.5 was only perfect and
+    # only non-solvable group in db so next two are quite restrictive
 
-     #when the test was first written 60.5 was only perfect and
-     # only non-solvable group in db so next two are quite restrictive
     def test_perfect_search(self):
         r"""
         Check that we can restrict to perfect or non-perfect groups only
@@ -423,10 +416,10 @@ class AbGpsHomeTest(LmfdbTest):
         r"""
         Check that we can restrict to perfect or non-perfect subgroups only
         """
-        page = self.tc.get("/Groups/Abstract/?perfect=yes&proper=yes&search_type=Subgroups", follow_redirects=True).get_data(as_text=True)
+        page = self.tc.get("/Groups/Abstract/?perfect=yes&nontrivproper=yes&search_type=Subgroups", follow_redirects=True).get_data(as_text=True)
         assert "180.19.3.a1.a1" in page, "Missing perfect group"
         assert "4.2.2.a1.a1" not in page, "Incorrect perfect group"
-        page = self.tc.get("/Groups/Abstract/?perfect=no&proper=yes&search_type=Subgroups", follow_redirects=True).get_data(as_text=True)
+        page = self.tc.get("/Groups/Abstract/?perfect=no&nontrivproper=yes&search_type=Subgroups", follow_redirects=True).get_data(as_text=True)
         assert "4.2.2.a1.a1" in page, "Missing imperfect group"
         assert "180.19.3.a1.a1" not in page, "Incorrect imperfect group"
 
@@ -452,10 +445,10 @@ class AbGpsHomeTest(LmfdbTest):
         r"""
         Check that we can restrict to proper or non-proper subgroups only
         """
-        self.check_args("/Groups/Abstract/?proper=yes&search_type=Subgroups", "4.1.2.a1.a1")
-        self.not_check_args("/Groups/Abstract/?proper=yes&search_type=Subgroups", "2.1.1.a1.a1")
-        self.check_args("/Groups/Abstract/?proper=no&search_type=Subgroups", "2.1.1.a1.a1")
-        self.not_check_args("/Groups/Abstract/?proper=no&search_type=Subgroups", "4.1.2.a1.a1")
+        self.check_args("/Groups/Abstract/?nontrivproper=yes&search_type=Subgroups", "4.1.2.a1.a1")
+        self.not_check_args("/Groups/Abstract/?nontrivproper=yes&search_type=Subgroups", "2.1.1.a1.a1")
+        self.check_args("/Groups/Abstract/?nontrivproper=no&search_type=Subgroups", "2.1.1.a1.a1")
+        self.not_check_args("/Groups/Abstract/?nontrivproper=no&search_type=Subgroups", "4.1.2.a1.a1")
 
     def test_subgroup_ambient_label_search(self):
         r"""
@@ -556,4 +549,3 @@ class AbGpsHomeTest(LmfdbTest):
         self.not_check_args("/Groups/Abstract/?minimal_normal=yes&search_type=Subgroups", "4.2.4.a1.a1")
         self.check_args("/Groups/Abstract/?minimal_normal=no&search_type=Subgroups", "4.2.4.a1.a1")
         self.not_check_args("/Groups/Abstract/?minimal_normal=no&search_type=Subgroups", "2.1.1.a1.a1")
-

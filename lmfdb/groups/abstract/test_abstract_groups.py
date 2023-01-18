@@ -22,8 +22,6 @@ class AbGpsTest(LmfdbTest):
  #       assert r'<tdclass="label">Order</td><td>${2^{8}}$</td></tr>' in page
        # self.check_args("/Variety/Abelian/Fq/2/79/ar_go", "Principally polarizable")
 
-
-
     def test_abstract_group_download(self):
 #        r"""
 #        Test downloading on search results page.
@@ -66,7 +64,7 @@ class AbGpsTest(LmfdbTest):
             "4432676798593", # factor of aut_order
         ])
         self.check_args("/Groups/Abstract/ab/3000", [ # large cyclic group
-            r"C_2^3\times C_{100}", # automorphism group structure
+            r"C_{2}^{3} \times C_{100}", # automorphism group structure
         ])
 
     def test_underlying_data(self):

@@ -4,7 +4,7 @@
 __all__ = ['request', 'make_response', 'flash', 'url_for', 'render_template',
            'send_file', 'list_to_factored_poly_otherorder', 'prop_int_pretty',
            'list_factored_to_factored_poly_otherorder', 'integer_squarefree_part', 'integer_is_squarefree',
-           'key_for_numerically_sort', 'an_list', 'coeff_to_poly',
+           'key_for_numerically_sort', 'an_list', 'coeff_to_poly', 'coeff_to_poly_multi',
            'coeff_to_power_series', 'display_multiset', 'pair2complex',
            'round_CBF_to_half_int', 'str_to_CBF', 'to_dict', 'display_float',
            'display_complex', 'round_to_half_int', 'splitcoeff', 'comma', 'latex_comma',
@@ -46,7 +46,7 @@ __all__ = ['request', 'make_response', 'flash', 'url_for', 'render_template',
            'datetime_to_timestamp_in_ms', 'timestamp_in_ms_to_datetime',
            'TraceHash', 'TraceHashClass',
            'redirect_no_cache', 'letters2num', 'num2letters',
-           'raw_typeset', 'raw_typeset_poly', 'raw_typeset_poly_factor', 
+           'raw_typeset', 'raw_typeset_poly', 'raw_typeset_poly_factor',
            'raw_typeset_qexp', 'raw_typeset_int', 'compress_poly_Q',
            'input_string_to_poly', 'dispZmat', 'dispcyclomat']
 
@@ -62,6 +62,7 @@ from .utilities import (
     an_list,
     code_snippet_knowl,
     coeff_to_poly,
+    coeff_to_poly_multi,
     coeff_to_power_series,
     comma,
     datetime_to_timestamp_in_ms,
@@ -126,8 +127,8 @@ from .web_display import (
 )
 
 from .search_parsing import (
-    parse_ints, parse_signed_ints, parse_posints, parse_floats, parse_mod1, 
-    parse_rational,
+    parse_ints, parse_signed_ints, parse_posints,
+    parse_floats, parse_mod1, parse_rational,
     parse_rational_to_list, parse_padicfields, parse_rats, parse_inertia,
     parse_bracketed_posints, parse_bracketed_rats, parse_bool, parse_bool_unknown, parse_primes,
     parse_element_of, parse_not_element_of, parse_subset, parse_submultiset, parse_list,

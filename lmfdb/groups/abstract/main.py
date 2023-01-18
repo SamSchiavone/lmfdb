@@ -14,7 +14,7 @@ from flask import (
     url_for,
     abort,
 )
-from six import BytesIO
+from io import BytesIO
 from string import ascii_lowercase
 from sage.all import ZZ, latex, factor, prod, Permutations
 from sage.misc.cachefunc import cached_function
@@ -53,6 +53,7 @@ from .web_groups import (
     WebAbstractRationalCharacter,
     WebAbstractSubgroup,
     group_names_pretty,
+    primary_to_smith
 )
 from .stats import GroupStats
 
@@ -100,11 +101,11 @@ def learnmore_list_remove(matchstring):
 
 
 def subgroup_label_is_valid(lab):
-    return abstract_subgroup_label_regex.match(lab)
+    return abstract_subgroup_label_regex.fullmatch(lab)
 
 
 def label_is_valid(lab):
-    return abstract_group_label_regex.match(lab)
+    return abstract_group_label_regex.fullmatch(lab)
 
 
 def get_bread(tail=[]):
@@ -544,7 +545,7 @@ def index():
             return subgroup_search(info)
     info["stats"] = GroupStats()
     info["count"] = 50
-    info["order_list"] = ["1-63", "64-127", "128-255", "256-383", "384-511"]
+    info["order_list"] = ["1-64", "65-127", "128", "129-255", "256", "257-383", "384", "385-511", "513-1000", "1001-1500", "1501-2000"]
     info["nilp_list"] = range(1, 8)
     info["prop_browse_list"] = [
         ("abelian=yes", "abelian"),
@@ -647,18 +648,26 @@ def canonify_abelian_label(label, smith=False):
 def by_abelian_label(label):
     # For convenience, we provide redirects for abelian groups:
     # m1_e1.m2_e2... represents C_{m1}^e1 x C_{m2}^e2 x ...
-    if not AB_LABEL_RE.match(label):
+    if not AB_LABEL_RE.fullmatch(label):
         flash_error(
             r"The abelian label %s is invalid; it must be of the form m1_e1.m2_e2... representing $C_{m_1}^{e_1} \times C_{m_2}^{e_2} \times \cdots$",
             label,
         )
         return redirect(url_for(".index"))
     primary = canonify_abelian_label(label)
-    dblabel = db.gps_groups.lucky(
-        {"abelian": True, "primary_abelian_invariants": primary}, "label"
-    )
+    # Avoid database error on a hopeless search
+    dblabel = None
+    if not [z for z in primary if z>2**31-1]:
+        dblabel = db.gps_groups.lucky(
+            {"abelian": True, "primary_abelian_invariants": primary}, "label"
+        )
     if dblabel is None:
-        return render_abstract_group("ab/" + label, data=primary)
+        snf = primary_to_smith(primary)
+        canonical_label = '.'.join([str(z) for z in snf])
+        if canonical_label != label:
+            return redirect(url_for(".by_abelian_label", label=canonical_label))
+        else:
+            return render_abstract_group("ab/" + canonical_label, data=primary)
     else:
         return redirect(url_for(".by_label", label=dblabel))
 
@@ -757,15 +766,15 @@ CYCLIC_PRODUCT_RE = re.compile(r"[Cc][0-9]+(\^[0-9]+)?(\s*[*Xx]\s*[Cc][0-9]+(\^[
 def group_jump(info):
     jump = info["jump"]
     # by label
-    if abstract_group_label_regex.match(jump):
+    if abstract_group_label_regex.fullmatch(jump):
         return redirect(url_for(".by_label", label=jump))
     # by abelian label
-    if jump.startswith("ab/") and AB_LABEL_RE.match(jump[3:]):
+    if jump.startswith("ab/") and AB_LABEL_RE.fullmatch(jump[3:]):
         return redirect(url_for(".by_abelian_label", label=jump[3:]))
     # or as product of cyclic groups
-    if CYCLIC_PRODUCT_RE.match(jump):
+    if CYCLIC_PRODUCT_RE.fullmatch(jump):
         invs = [n.strip() for n in jump.upper().replace("C", "").replace("X", "*").replace("^", "_").split("*")]
-        return redirect(url_for(".by_abelian_label", label = ".".join(invs)))
+        return redirect(url_for(".by_abelian_label", label=".".join(invs)))
     # by name
     labs = db.gps_groups.search({"name":jump.replace(" ", "")}, projection="label", limit=2)
     if len(labs) == 1:
@@ -774,7 +783,7 @@ def group_jump(info):
         return redirect(url_for(".index", name=jump.replace(" ", "")))
     # by special name
     for family in db.gps_families.search():
-        m = re.match(family["input"], jump)
+        m = re.fullmatch(family["input"], jump)
         if m:
             m_dict = dict([a, int(x)] for a, x in m.groupdict().items()) # convert string to int
             lab = db.gps_special_names.lucky({"family":family["family"], "parameters":m_dict}, projection="label")
@@ -965,7 +974,7 @@ def subgroup_search(info, query={}):
     parse_bool(
         info, query, "hall", process=lambda x: ({"$gt": 1} if x else {"$lte": 1})
     )
-    parse_bool(info, query, "proper")
+    parse_bool(info, query, "nontrivproper", qfield="proper")
     parse_regex_restricted(info, query, "subgroup", regex=abstract_group_label_regex)
     parse_regex_restricted(info, query, "ambient", regex=abstract_group_label_regex)
     parse_regex_restricted(info, query, "quotient", regex=abstract_group_label_regex)
@@ -1195,6 +1204,7 @@ def shortsubinfo(ambient, short_label):
         return ""
     wsg = WebAbstractSubgroup(label)
     # helper function
+
     def subinfo_getsub(title, knowlid, lab):
         full_lab = "%s.%s" % (ambient, lab)
         h = WebAbstractSubgroup(full_lab)
@@ -1293,12 +1303,16 @@ def how_computed_page():
 
 @abstract_page.route("/data/<label>")
 def gp_data(label):
+    if not abstract_group_label_regex.fullmatch(label):
+        return abort(404, f"Invalid label {label}")
     bread = get_bread([(label, url_for_label(label)), ("Data", " ")])
     title = f"Abstract group data - {label}"
     return datapage(label, ["gps_groups", "gps_groups_cc", "gps_qchar", "gps_char", "gps_subgroups"], bread=bread, title=title, label_cols=["label", "group", "group", "group", "ambient"])
 
 @abstract_page.route("/sdata/<label>")
 def sgp_data(label):
+    if not abstract_subgroup_label_regex.fullmatch(label):
+        return abort(404, f"Invalid label {label}")
     bread = get_bread([(label, url_for_subgroup_label(label)), ("Data", " ")])
     title = f"Abstract subgroup data - {label}"
     data = db.gps_subgroups.lookup(label, ["ambient", "subgroup", "quotient"])
@@ -1381,9 +1395,7 @@ def download_group(**args):
     strIO = BytesIO()
     strIO.write(s.encode("utf-8"))
     strIO.seek(0)
-    return send_file(
-        strIO, attachment_filename=filename, as_attachment=True, add_etags=False
-    )
+    return send_file(strIO, download_name=filename, as_attachment=True)
 
 
 def display_profile_line(data, ambient, aut):
@@ -1709,6 +1721,7 @@ class GroupsSearchArray(SearchArray):
 
     sort_knowl = "group.sort_order"
 
+
 class SubgroupSearchArray(SearchArray):
     null_column_explanations = { # No need to display warnings for these
         "quotient": False,
@@ -1721,6 +1734,7 @@ class SubgroupSearchArray(SearchArray):
     sorts = [("", "ambient order", ['ambient_order', 'ambient', 'quotient_order', 'subgroup']),
              ("sub_ord", "subgroup order", ['subgroup_order', 'ambient_order', 'ambient', 'subgroup']),
              ("sub_ind", "subgroup index", ['quotient_order', 'ambient_order', 'ambient', 'subgroup'])]
+
     def __init__(self):
         abelian = YesNoBox(name="abelian", label="Abelian", knowl="group.abelian")
         cyclic = YesNoBox(name="cyclic", label="Cyclic", knowl="group.cyclic")
@@ -1801,11 +1815,11 @@ class SubgroupSearchArray(SearchArray):
             knowl="group.order",
             example="128",
         )
-        proper = YesNoBox(name="proper", label="Proper", knowl="group.proper_subgroup")
+        nontrivproper = YesNoBox(name="nontrivproper", label=display_knowl('group.trivial_subgroup', 'Non-trivial') + " " + display_knowl('group.proper_subgroup', 'proper'))
 
         self.refine_array = [
             [subgroup, subgroup_order, cyclic, abelian, solvable],
-            [normal, characteristic, perfect, maximal, central, proper],
+            [normal, characteristic, perfect, maximal, central, nontrivproper],
             [ambient, ambient_order, direct, split, hall, sylow],
             [
                 quotient,
@@ -2094,10 +2108,14 @@ def aut_data(label):
 def dyn_gen(f, args):
     r"""
     Called from the generic dynamic knowl.
-    f is the name of a function to call, which has to be in flist, which
-      is at the bottom of this file
-    args is a string with the arguments, which are concatenated together
-      with %7C, which is the encoding of the pipe symbol
+
+    INPUT:
+
+    - ``f`` is the name of a function to call, which has to be in ``flist``,
+      which is at the bottom of this file
+
+    - ``args`` is a string with the arguments, which are concatenated together
+      with ``%7C``, which is the encoding of the pipe symbol
     """
     func = flist[f]
     arglist = args.split("|")

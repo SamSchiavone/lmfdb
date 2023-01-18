@@ -63,7 +63,7 @@ class PostgresUserTable(PostgresBase):
         hashed.update(fixed_salt)  # fixed salt must come last!
         return hashed.hexdigest()
 
-    def bchash(self, pwd, existing_hash = None):
+    def bchash(self, pwd, existing_hash=None):
         """
         Generate a bcrypt based password hash. Intended to replace
         Schilly's original hashing algorithm
@@ -96,7 +96,6 @@ class PostgresUserTable(PostgresBase):
                 raise Exception("ERROR: Passwords do not match!")
             pwd = pwd_input
         password = self.bchash(pwd)
-        from datetime import datetime
         #TODO: use identifiers
         insertor = SQL(u"INSERT INTO userdb.users (username, bcpassword, created, full_name, about, url) VALUES (%s, %s, %s, %s, %s, %s)")
         self._execute(insertor, [uid, password, datetime.utcnow(), full_name, about, url])
@@ -140,14 +139,14 @@ class PostgresUserTable(PostgresBase):
             raise ValueError("User not present in database!")
         bcpass, oldpass = cur.fetchone()
         if bcpass:
-            if bcpass == self.bchash(pwd, existing_hash = bcpass):
+            if bcpass == self.bchash(pwd, existing_hash=bcpass):
                 return True
         else:
             for i in range(self.rmin, self.rmax + 1):
                 if oldpass == self.hashpwd(pwd, str(i)):
                     bcpass = self.bchash(pwd)
                     if bcpass:
-                        logger.info("user " + uid  +  " logged in with old style password, trying to update")
+                        logger.info("user " + uid + " logged in with old style password, trying to update")
                         try:
                             #TODO: use identifiers
                             updater = SQL("UPDATE userdb.users SET (bcpassword) = (%s) WHERE username = %s")

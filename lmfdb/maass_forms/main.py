@@ -2,7 +2,7 @@
 
 import re
 from lmfdb import db
-from flask import render_template, request, url_for,  abort
+from flask import render_template, request, url_for, abort
 from lmfdb.maass_forms import maass_page #, logger
 from lmfdb.utils import (
     SearchArray, search_wrap, TextBox, SelectBox, CountBox, to_dict, comma,
@@ -18,8 +18,9 @@ from lmfdb.maass_forms.web_maassform import WebMaassForm, MaassFormDownloader, c
 from sage.all import gcd
 
 CHARACTER_LABEL_RE = re.compile(r"^[1-9][0-9]*\.[1-9][0-9]*")
+MAASS_ID_RE = re.compile(r"^[0-9a-f]+$")
 
-bread_prefix = lambda: [('Modular forms', url_for('modular_forms')),('Maass', url_for('.index'))]
+def bread_prefix(): return [('Modular forms', url_for('modular_forms')),('Maass', url_for('.index'))]
 
 ###############################################################################
 # Learnmore display functions
@@ -138,6 +139,7 @@ def completeness_page():
     return render_template('single.html', kid='rcs.cande.maass',
                            title=t, bread=bread, learnmore=learnmore_list_remove('Completeness'))
 
+
 @maass_page.route('/Reliability')
 def reliability_page():
     t = 'Reliability of Maass form data'
@@ -145,16 +147,18 @@ def reliability_page():
     return render_template('single.html', kid='rcs.rigor.maass',
                            title=t, bread=bread, learnmore=learnmore_list_remove('Reliability'))
 
+
 class MaassSearchArray(SearchArray):
     sorts = [("", "level", ['level', 'weight', 'conrey_index', 'spectral_parameter']),
              ("spectral", "spectral parameter", ['spectral_parameter', 'weight', 'level', 'conrey_index'])]
     noun = "Maass form"
     plural_noun = "Maass forms"
+
     def __init__(self):
         level = TextBox(name="level", label="Level", knowl="mf.maass.mwf.level", example="1", example_span="997 or 1-10")
         weight = TextBox(name="weight", label="Weight", knowl="mf.maass.mwf.weight", example="0", example_span="0 (only weight 0 currently available)")
         character = TextBox(name="character", label="Character", knowl="mf.maass.mwf.character", example="1.1", example_span="1.1 or 5.1 (only trivial character currently available)")
-        symmetry = SelectBox(name="symmetry", label="Symmetry",  knowl="mf.maass.mwf.symmetry", options=[("", "any symmetry"), ("1", "even only"), ("-1", "odd only")])
+        symmetry = SelectBox(name="symmetry", label="Symmetry", knowl="mf.maass.mwf.symmetry", options=[("", "any symmetry"), ("1", "even only"), ("-1", "odd only")])
         spectral_parameter = TextBox(name="spectral_parameter",
                                      label="Spectral parameter",
                                      knowl="mf.maass.mwf.spectralparameter",
@@ -183,6 +187,7 @@ def parse_character(inp, query, qfield):
         raise ValueError("Character labels q.n must have Conrey index n no greater than the modulus q.")
     if gcd(level,conrey_index) != 1:
         raise ValueError("Character labels q.n must have Conrey index coprime to the modulus q.")
+
     def contains_level(D):
         if D == level:
             return True
@@ -190,6 +195,7 @@ def parse_character(inp, query, qfield):
             a = D.get('$gte')
             b = D.get('$lte')
             return (a is None or level >= a) and (b is None or level <= b)
+
     # Check that the provided constraint on level is consistent with the one
     # given by the character, and update level/$or
     if '$or' in query and all(level_field in D for D in query['$or']):
@@ -253,7 +259,7 @@ def parse_rows_cols(info):
 
 def search_by_label(label):
     try:
-        mf =  WebMaassForm.by_label(label)
+        mf = WebMaassForm.by_label(label)
     except (KeyError,ValueError) as err:
         return abort(404,err.args)
     info = to_dict(request.args)
@@ -271,6 +277,8 @@ def search_by_label(label):
 
 @maass_page.route("/data/<label>")
 def maass_data(label):
+    if not MAASS_ID_RE.fullmatch(label):
+        return abort(404, f"Invalid id {label}")
     title = f"Maass form data - {label}"
     bread = [("Modular forms", url_for("modular_forms")),
              ("Maass", url_for(".index")),

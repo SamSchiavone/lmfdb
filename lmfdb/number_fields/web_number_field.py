@@ -9,8 +9,8 @@ from sage.all import (
     QQ, NumberField, PolynomialRing, latex, pari, cached_function, Permutation)
 
 from lmfdb import db
-from lmfdb.utils import (web_latex, coeff_to_poly, pol_to_html, 
-        raw_typeset_poly, display_multiset, factor_base_factor, 
+from lmfdb.utils import (web_latex, coeff_to_poly, pol_to_html,
+        raw_typeset_poly, display_multiset, factor_base_factor,
         integer_squarefree_part, integer_is_squarefree,
         factor_base_factorization_latex)
 from lmfdb.logger import make_logger
@@ -210,7 +210,7 @@ def is_fundamental_discriminant(d):
 
 @cached_function
 def field_pretty(label):
-    d, r, D, i = label.split('.')
+    d, r, D, _ = label.split('.')
     if d == '1':  # Q
         return r'\(\Q\)'
     if d == '2':  # quadratic field
@@ -233,8 +233,7 @@ def field_pretty(label):
                 labels = [str(z.get_label()) for z in subs]
                 labels = [z.split('.') for z in labels]
                 # extract abs disc and signature to be good for sorting
-                labels = [[integer_squarefree_part(ZZ(z[2])), - int(z[1])] for z in labels]
-                labels.sort()
+                labels = sorted([[integer_squarefree_part(ZZ(z[2])), - int(z[1])] for z in labels])
                 # put in +/- sign
                 labels = [z[0]*(-1)**(1+z[1]/2) for z in labels]
                 labels = ['i' if z == -1 else r'\sqrt{%d}'% z for z in labels]
@@ -252,8 +251,13 @@ def psum(val, li):
 def decodedisc(ads, s):
     return ZZ(ads[3:]) * s
 
+def fake_label(label, coef):
+    if label != "N/A":
+        return [int(x) for x in label.split('.')]
+    poly = coeff_to_poly(coef)
+    return [poly.degree(), poly.degree()+1, poly.discriminant(), 0]
 
-def formatfield(coef, show_poly=False, missing_text=None):
+def formatfield(coef, show_poly=False, missing_text=None, data=None):
     r"""
       Take a list of coefficients (which can be a string like '1,3,1'
       and either produce a number field knowl if the polynomial matches
@@ -266,8 +270,14 @@ def formatfield(coef, show_poly=False, missing_text=None):
     """
     if isinstance(coef, str):
         coef = string2list(coef)
-    thefield = WebNumberField.from_coeffs(coef)
-    if thefield._data is None:
+    if data is None:
+        thefield = WebNumberField.from_coeffs(coef)
+    else:
+        if data['label'] == "N/A":
+            thefield = None
+        else:
+            thefield = WebNumberField(data['label'], data=data)
+    if thefield is None or thefield._data is None:
         deg = len(coef) - 1
         mypolraw = coeff_to_poly(coef)
         mypol = latex(mypolraw)
@@ -277,11 +287,15 @@ def formatfield(coef, show_poly=False, missing_text=None):
         mypol = mypol.replace(' ','').replace('+','%2B').replace('{', '%7B').replace('}','%7d')
         mypolraw = str(mypolraw).replace(' ','').replace('+','%2B').replace('{', '%7B').replace('}','%7d')
         if missing_text is None:
-            mypol = '<a title = "Field missing" knowl="nf.field.missing" kwargs="poly=%s&raw=%s">Deg %d</a>' % (mypol,mypolraw,deg)
+            mypol = '<a title = "Field missing" knowl="nf.field.missing" kwargs="poly=%s&raw=%s">deg %d</a>' % (mypol,mypolraw,deg)
         else:
             mypol = '<a title = "Field missing" knowl="nf.field.missing" kwargs="poly=%s">%s</a>' % (mypol,missing_text)
         return mypol
-    return nf_display_knowl(thefield.get_label(),thefield.field_pretty())
+    if data is None:
+        label = thefield.get_label()
+    else:
+        label = data['label']
+    return nf_display_knowl(label,thefield.field_pretty())
 
 # input is a list of pairs, module and multiplicity
 def modules2string(n, t, modlist):
@@ -503,6 +517,27 @@ class WebNumberField:
             return [str(u) for u in zkstrings]
         return list(pari(self.poly()).nfbasis())
 
+    def monogenic(self):
+        if self.haskey('monogenic'):
+            if self._data['monogenic'] == 1:
+                return 'Yes'
+            if self._data['monogenic'] == 0:
+                return 'Not computed'
+            if self._data['monogenic'] == -1:
+                return 'No'
+        return 'Not computed'
+
+    def index(self):
+        if self.haskey('index'):
+            return r'$%d$'%self._data['index']
+        return 'Not computed'
+
+    def inessentialp(self):
+        if self.haskey('inessentialp'):
+            inep = self._data['inessentialp']
+            return ', '.join(r'$%s$' % z for z in inep) if inep else 'None'
+        return 'Not computed'
+
     # 2018-4-1: is this actually used?  grep -r doesn't find anywhere it's called....
     # Used by subfields and resolvent functions to
     # take coefficients for fields and either return
@@ -698,9 +733,6 @@ class WebNumberField:
             return self._data['units']
         elif self.unit_rank() == 0:
             res = []
-        elif self.haskey('class_number'):
-            K = self.K()
-            res = K.unit_group().fundamental_units()
         if res:
             res = res.replace('\\\\', '\\')
             return res
@@ -886,7 +918,7 @@ class WebNumberField:
                 LF = db.lf_fields.lookup(lab)
                 f = latex(R(LF['coeffs']))
                 p = LF['p']
-                thisdat = [lab, f, LF['e'], LF['f'], LF['c'], 
+                thisdat = [lab, f, LF['e'], LF['f'], LF['c'],
                     transitive_group_display_knowl(LF['galois_label']),
                     LF['t'], LF['u'], LF['slopes']]
                 if str(p) not in local_algebra_dict:
@@ -902,7 +934,7 @@ class WebNumberField:
         return [loc_alg_dict.get(str(p), None) for p in self.ramified_primes()]
 
     def make_code_snippets(self):
-         # read in code.yaml from numberfields directory:
+        # read in code.yaml from numberfields directory:
         _curdir = os.path.dirname(os.path.abspath(__file__))
         self.code = yaml.load(open(os.path.join(_curdir, "code.yaml")), Loader=yaml.FullLoader)
         self.code['show'] = {'sage':'','pari':'', 'magma':''} # use default show names

@@ -97,13 +97,11 @@ class WebGaloisGroup:
         return self._data['t']
 
     def is_abelian(self):
-        if self._data['ab'] == 1:
-            return True
-        return False
+        return self._data['ab'] == 1
 
     def arith_equivalent(self):
         if 'arith_equiv' in self._data:
-          return self._data['arith_equiv']
+            return self._data['arith_equiv']
         return 0
 
     def gapid(self):
@@ -396,7 +394,6 @@ def galois_group_data(n, t):
     return inf + rest
 
 
-
 @cached_function
 def group_cclasses_knowl_guts(n, t):
     label = base_label(n, t)
@@ -480,8 +477,7 @@ def subfield_display(n, subs):
 def otherrep_display(n, t, reps):
     reps = [(j[0], j[1]) for j in reps]
     me = (n, t)
-    difreps = list(set(reps))
-    difreps.sort()
+    difreps = sorted(set(reps))
     ans = ''
     for k in difreps:
         if ans != '':
@@ -535,11 +531,12 @@ def resolve_display(resolves):
 
 def group_display_inertia(code):
     if str(code[0]) == "t":
-        return transitive_group_display_knowl(base_label(*code[1]))
+        return group_pretty_and_nTj(code[1][0], code[1][1], useknowls=True)
     if code[1] == [1,1]:
         return "trivial"
-    ans = "Intransitive group isomorphic to "+abstract_group_display_knowl(f"{code[1][0]}.{code[1][1]}")
-    return ans
+    if code[1][1] < 0:
+        return "intransitive group not computed"
+    return "Intransitive group isomorphic to "+abstract_group_display_knowl(f"{code[1][0]}.{code[1][1]}")
 
 def cclasses(n, t):
     group = WebGaloisGroup.from_nt(n,t)
@@ -856,4 +853,3 @@ for ky in aliases.keys():
     if nt not in aliases[ky]:
         aliases[ky].append(nt)
     aliases[ky].sort()
-
