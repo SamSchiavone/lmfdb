@@ -100,13 +100,11 @@
 <p> {{ KNOWL('ag.canonical_model', 'Canonical model') }} in $\mathbb{P}^{ {{nb_var-1}} }$: </p>
 {% elif type == 2 %}
 <p> {%  if smooth == True %}
-  {{ KNOWL('ag.smooth', 'Smooth') }}
-  {{ KNOWL('ag.plane_model', 'plane model') }}:
+  {{ KNOWL('modcurve.plane_model', 'Smooth plane model') }}:
   {% elif smooth == False %}
-  {{ KNOWL('ag.smooth', 'Singular') }}
-  {{ KNOWL('ag.plane_model', 'plane model') }}:
+  {{ KNOWL('modcurve.plane_model', 'Singular plane model') }}:
   {% else %}
-  {{ KNOWL('ag.plane_model', 'Plane model') }}:
+  {{ KNOWL('modcurve.plane_model', 'Plane model') }}:
   {% endif %}
 </p>
 {% elif type == 5 %}
@@ -201,6 +199,9 @@
 </table>
 {% endif %}
 
+{#
+We are removing this section until we have more sources of non-rational points.  You can still search for them 
+
 <h2> {{ KNOWL('modcurve.nonrational_point', 'Non-rational points') }}</h2>
 
 <p> {{ curve.low_degree_points_description | safe }} </p>
@@ -225,6 +226,7 @@
   </tbody>
 </table>
 {% endif %}
+#}
 
 {% set modelisos = curve.formatted_modelisos %}
 {% if modelisos %}
