@@ -353,8 +353,8 @@ euler_factor_columns = SearchColumns([
     MultiProcessedCol("label", "lfunction.label", "Label",
                          ["label", "url"],
                          lambda label, url: '<a href="%s">%s</a>' % (url, label),
-                      download_col="label")] +
-    [MathCol("euler%s" % p, "lfunction.euler_factor", r"$F_%s(T)$" % p, default=False) for p in prime_range(100)],
+                      download_col="label")]
+    + [MathCol("euler%s" % p, "lfunction.euler_factor", r"$F_%s(T)$" % p, default=False) for p in prime_range(100)],
     db_cols=1)
 
 class LfuncDownload(Downloader):
@@ -393,7 +393,7 @@ def l_function_search(info, query):
 def trace_search(info, query):
     set_Trn(info, query)
     common_parse(info, query)
-    process_an_constraints(info, query, qfield='dirichlet_coefficients', nshift=lambda n: n+1)
+    process_an_constraints(info, query, qfield='dirichlet_coefficients')
 
 
 @search_parser
@@ -978,6 +978,8 @@ def l_function_cmf_page(level, weight, char_orbit_label, hecke_orbit, character,
     # thus it must be an old label, and we redirect to the orbit
     old_label = '.'.join(map(str, [level, weight, character, hecke_orbit]))
     newform_label = convert_newformlabel_from_conrey(old_label)
+    if newform_label is None:
+        return abort(404, 'Invalid label')
     level, weight, char_orbit_label, hecke_orbit = newform_label.split('.')
     return redirect(url_for('.l_function_cmf_orbit', level=level, weight=weight,
                               char_orbit_label=char_orbit_label, hecke_orbit=hecke_orbit), code=301)
