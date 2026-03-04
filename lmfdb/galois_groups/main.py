@@ -9,25 +9,25 @@ from sage.all import ZZ, latex, libgap
 from lmfdb import db
 from lmfdb.app import app
 from lmfdb.utils import (
-    list_to_latex_matrix, flash_error, comma, latex_comma, to_dict, display_knowl,
+    list_to_latex_matrix, flash_error, comma, to_dict, display_knowl,
     clean_input, prep_ranges, parse_bool, parse_ints, parse_galgrp,
     SearchArray, TextBox, TextBoxNoEg, YesNoBox, ParityBox, CountBox,
     StatsDisplay, totaler, proportioners, prop_int_pretty, Downloader,
-    sparse_cyclotomic_to_mathml, search_wrap, redirect_no_cache)
+    sparse_cyclotomic_to_mathml, search_wrap, redirect_no_cache, CodeSnippet)
 from lmfdb.utils.interesting import interesting_knowls
 from lmfdb.utils.search_columns import SearchColumns, LinkCol, MultiProcessedCol, MathCol, CheckCol, SearchCol
 from lmfdb.api import datapage
 from lmfdb.number_fields.web_number_field import modules2string
-from lmfdb.galois_groups import galois_groups_page, logger
+from lmfdb.galois_groups import galois_groups_page
 from lmfdb.groups.abstract.main import abstract_group_display_knowl
 from .transitive_group import (
     galois_module_knowl_guts, group_display_short,
     subfield_display, resolve_display, chartable,
     cclasses_display_knowl, character_table_display_knowl,
     group_alias_table, WebGaloisGroup, knowl_cache)
+from lmfdb.logger import logger
 
 # Test to see if this gap installation knows about transitive groups
-# logger = make_logger("GG")
 
 try:
     G = libgap.TransitiveGroup(9, 2)
@@ -52,7 +52,7 @@ def learnmore_list_remove(matchstring):
 
 def get_bread(breads=[]):
     bc = [("Galois groups", url_for(".index"))]
-    bc.extend(b for b in breads)
+    bc.extend(breads)
     return bc
 
 
@@ -125,6 +125,7 @@ class GG_download(Downloader):
             }
         ),
     }
+
     def modify_query(self, info, query):
         _set_show_subs(info)
 
@@ -340,7 +341,7 @@ def render_group_webpage(args):
         data['malle_a'] = wgg.malle_a
         downloads = []
         for lang in [("Magma", "magma"), ("Oscar", "oscar"), ("SageMath", "sage")]:
-            downloads.append(('{} commands'.format(lang[0]), url_for(".gg_code", label=label, download_type=lang[1])))
+            downloads.append(('{} commands'.format(lang[0]), url_for(".gg_code_download", label=label, download_type=lang[1])))
         downloads.append(('Underlying data', url_for(".gg_data", label=label)))
         # split the label so that breadcrumbs point to a search for this object's degree
         parent_id, child_id = label.split("T")
@@ -359,20 +360,22 @@ def render_group_webpage(args):
             KNOWL_ID="gg.%s" % label,
             learnmore=learnmore_list()+[('Picture description', url_for('.pictures'))])
 
+
+sorted_code_names = ['gg', 'id', 'order', 'cyclic', 'abelian', 'solvable', 'nilpotent',
+                     'n', 't', 'even', 'primitive', 'auts', 'gens', 'ccs', 'char_table']
+
+def gg_code(label, download_type):
+    gg = WebGaloisGroup(label)
+    gg.make_code_snippets()
+    code = CodeSnippet(gg.code)
+    return code.export_code(label, download_type, sorted_code_names)
+
 @galois_groups_page.route('/<label>/download/<download_type>')
-def gg_code(label,download_type):
-    if download_type == "magma":
-        s = "// Magma code for creating transitive group " + label + "\n\n"
-        s += "G := TransitiveGroup(%s,%s);\n" % tuple(label.split("T"))
-    elif download_type == "oscar":
-        s = "# Oscar code for creating transitive group " + label + "\n\n"
-        s += "G = transitive_group(%s,%s)\n" % tuple(label.split("T"))
-    elif download_type == "sage":
-        s = "# Sage code for creating transitive group " + label + "\n\n"
-        s += "G = TransitiveGroup(%s,%s)\n" % tuple(label.split("T"))
-    else:
-        return abort(404, f"Invalid download type {download_type}")
-    response = make_response(s)
+def gg_code_download(**args):
+    try:
+        response = make_response(gg_code(**args))
+    except Exception as err:
+        return abort(404, str(err))
     response.headers['Content-type'] = 'text/plain'
     return response
 
@@ -595,8 +598,8 @@ class GaloisStats(StatsDisplay):
 
     @property
     def summary(self):
-        return r"The database currently contains $%s$ transitive subgroups of $S_n$, including all subgroups (up to conjugacy) for $n \le 47$ and $n \ne 32$.  Among the $2{,}801{,}324$ groups in degree $32$, all those with order less than $512$ or greater than $40{,}000{,}000{,}000$ are included." % latex_comma(self.ngroups)
+        return r"The database currently contains %s transitive subgroups of $S_n$, including all subgroups (up to conjugacy) for $n \le 47$ and $n \ne 32$.  Among the $2{,}801{,}324$ groups in degree $32$, all those with order less than $512$ or greater than $40{,}000{,}000{,}000$ are included." % comma(self.ngroups)
 
     @property
     def short_summary(self):
-        return r'The database current contains $%s$ groups, including all transitive subgroups of $S_n$ (up to conjugacy) for $n \le 47$ and $n \ne 32$.  Here are some <a href="%s">further statistics</a>.' % (latex_comma(self.ngroups), url_for(".statistics"))
+        return r'The database currently contains %s groups, including all transitive subgroups of $S_n$ (up to conjugacy) for $n \le 47$ and $n \ne 32$.  Here are some <a href="%s">further statistics</a>.' % (comma(self.ngroups), url_for(".statistics"))

@@ -16,7 +16,7 @@ from lmfdb.utils import (
     parse_signed_ints, parse_primes, parse_bracketed_posints, parse_nf_string,
     parse_floats, parse_subfield, search_wrap, parse_padicfields, integer_options,
     raw_typeset, raw_typeset_poly, flash_info, input_string_to_poly,
-    raw_typeset_int, compress_poly_Q, compress_polynomial, CodeSnippet)
+    raw_typeset_int, compress_poly_Q, compress_polynomial, CodeSnippet, redirect_no_cache)
 from lmfdb.utils.web_display import compress_int
 from lmfdb.utils.interesting import interesting_knowls
 from lmfdb.utils.search_columns import SearchColumns, SearchCol, CheckCol, MathCol, ProcessedCol, MultiProcessedCol, CheckMaybeCol, PolynomialCol
@@ -28,12 +28,10 @@ from lmfdb.galois_groups.transitive_group import (
     group_character_table_knowl_guts, group_alias_table,
     dihedral_gal, dihedral_ngal, multiquad)
 from lmfdb.groups.abstract.main import abstract_group_display_knowl
-from lmfdb.number_fields import nf_page, nf_logger
+from lmfdb.number_fields import nf_page
 from lmfdb.number_fields.web_number_field import (
     field_pretty, WebNumberField, nf_knowl_guts, factor_base_factor,
     factor_base_factorization_latex, fake_label, formatfield)
-
-assert nf_logger
 
 def bread_prefix(): return [('Number fields', url_for(".number_field_render_webpage"))]
 
@@ -167,6 +165,17 @@ def reliability():
     return render_template("single.html", kid='rcs.rigor.nf',
         title=t, bread=bread, learnmore=learnmore)
 
+@nf_page.route("/NumberFieldPictures")
+def nf_picture_page():
+    t = r'Pictures for number fields'
+    bread = bread_prefix() + [('Number Field Picture', ' ')]
+    return render_template(
+        "single.html",
+        kid='nf.picture',
+        title=t,
+        bread=bread,
+        learnmore=learnmore_list())
+
 
 @nf_page.route("/GaloisGroups")
 def render_groups_page():
@@ -198,10 +207,6 @@ def render_discriminants_page():
 @nf_page.route("/QuadraticImaginaryClassGroups")
 def render_class_group_data():
     info = to_dict(request.args)
-    #nf_logger.info('******************* ')
-    #for k in info.keys():
-    # nf_logger.info(str(k) + ' ---> ' + str(info[k]))
-    #nf_logger.info('******************* ')
     learnmore = learnmore_list_remove('Quadratic imaginary')
     t = 'Class groups of quadratic imaginary fields'
     bread = [("Datasets", url_for("datasets")), (t, ' ')]
@@ -315,7 +320,7 @@ def statistics():
                  for r2 in range(12)]
     nsig = [[{'cnt': comma(nsig[nn][r2]),
              'prop': format_percentage(nsig[nn][r2], n[nn]),
-             'query': url_for(".number_field_render_webpage")+'?degree=%d&signature=[%d,%d]' % (nn+1,nn+1-2*r2,r2)} for r2 in range(len(nsig[nn]))] for nn in range(len(nsig))]
+             'query': url_for(".number_field_render_webpage")+'?degree=%d&signature=(%d,%d)' % (nn+1,nn+1-2*r2,r2)} for r2 in range(len(nsig[nn]))] for nn in range(len(nsig))]
     h = [{'cnt': comma(h[j]),
           'prop': format_percentage(h[j], has_h),
           'label': '$10^{' + str(j - 1) + r'}<h\leq 10^{' + str(j) + '}$',
@@ -331,7 +336,7 @@ def statistics():
     sigclass1 = [[{'cnt': comma(sigclass1.get((nn+1,r2),0)),
                    'prop': format_percentage(sigclass1.get((nn+1,r2),0), sighasclass.get((nn+1,r2),0)) if sighasclass.get((nn+1,r2),0) > 0 else 0,
                    'show': sighasclass.get((nn+1,r2),0) > 0,
-                   'query': url_for(".number_field_render_webpage")+'?degree=%d&signature=[%d,%d]&class_number=1' % (nn + 1, nn + 1 - 2*r2, r2)}
+                   'query': url_for(".number_field_render_webpage")+'?degree=%d&signature=(%d,%d)&class_number=1' % (nn + 1, nn + 1 - 2*r2, r2)}
                   for r2 in range(len(nsig[nn]))] for nn in range(len(nsig))]
 
     n = [{'cnt': comma(n[nn]),
@@ -362,8 +367,8 @@ def statistics():
 @nf_page.route("/")
 def number_field_render_webpage():
     info = to_dict(request.args, search_array=NFSearchArray())
-    sig_list = sum([[[d - 2 * r2, r2] for r2 in range(
-        1 + (d // 2))] for d in range(1, 11)], []) + sum([[[d, 0]] for d in range(11, 21)], [])
+    sig_list = sum([[(d - 2 * r2, r2) for r2 in range(
+        1 + (d // 2))] for d in range(1, 11)], []) + sum([[(d, 0)] for d in range(11, 21)], [])
     sig_list = [str(s).replace(' ','') for s in sig_list[:16]]
     if not request.args:
         init_nf_count()
@@ -454,7 +459,7 @@ def render_field_webpage(args):
     data['class_group'] = nf.class_group()
     data['narrow_class_group'] = nf.narrow_class_group()
     data['class_group_invs'] = nf.class_group_invariants()
-    data['signature'] = nf.signature()
+    data['signature'] = nf.signature_display()
     data['coefficients'] = nf.coeffs()
     nf.make_code_snippets()
     D = nf.disc()
@@ -676,7 +681,8 @@ def render_field_webpage(args):
             resinfo.append(('ae', dnc, len(arith_equiv[1])))
 
     info['resinfo'] = resinfo
-    learnmore = learnmore_list()
+    learnmore = learnmore_list() + [('Number field pictures', url_for(".nf_picture_page"))]
+
     title = "Number field %s" % info['label']
 
     if npr == 1:
@@ -739,12 +745,16 @@ def render_field_webpage(args):
 def url_for_label(label):
     return url_for("number_fields.by_label", label=label)
 
+@nf_page.route("/random")
+@redirect_no_cache
+def random_field():
+    return url_for_label(db.nf_fields.random())
+
 @nf_page.route("/<label>")
 def by_label(label):
     if label == "random":
-        #This version leaves the word 'random' in the URL:
-        #return render_field_webpage({'label': label})
-        return redirect(url_for_label(db.nf_fields.random()), 301)
+        # Redirect old-style /NumberField/random to the dedicated /NumberField/random route
+        return redirect(url_for(".random_field"))
     try:
         nflabel = nf_string_to_label(clean_input(label))
         if label != nflabel:
@@ -760,7 +770,7 @@ def nf_datapage(label):
         return abort(404, f"Invalid label {label}")
     title = f"Number field data - {label}"
     bread = bread_prefix() + [(label, url_for(".by_label", label=label)), ("Data", " ")]
-    return datapage(label, "nf_fields", title=title, bread=bread)
+    return datapage(label, ["nf_fields", "nf_fields_extra"], title=title, bread=bread)
 
 @nf_page.route("/interesting")
 def interesting():
@@ -834,7 +844,7 @@ nf_columns = SearchColumns([
                  lambda label: '<a href="%s">%s</a>' % (url_for_label(label), nf_label_pretty(label))),
     PolynomialCol("coeffs", "nf.defining_polynomial", "Polynomial"),
     MathCol("degree", "nf.degree", "Degree", align="center", default=False),
-    MultiProcessedCol("signature", "nf.signature", "Signature", ["r2", "degree"], lambda r2, degree: '[%s,%s]' % (degree - 2*r2, r2 ), apply_download=False, align="center", default=False),
+    MultiProcessedCol("signature", "nf.signature", "Signature", ["r2", "degree"], lambda r2, degree: '(%s, %s)' % (degree - 2*r2, r2 ), apply_download=lambda r2, degree: [degree - 2*r2, r2], align="center", default=False),
     DiscriminantCol("disc", "nf.discriminant", "Discriminant", ['disc_sign', 'disc_abs'], func=None, align="left"),
     MathCol("num_ram", "nf.ramified_primes", "Ram. prime count", short_title="ramified prime count", default=False),
     MathCol("rd", "nf.root_discriminant", "Root discriminant", default=False),
@@ -872,6 +882,7 @@ class NFDownloader(Downloader):
                 "sage": 'poly = ZZx(out["coeffs"])',
                 "magma": 'poly := ZZx!(out`coeffs);',
                 "gp": 'poly = Polrev(mapget(out, "coeffs"));',
+                "oscar": 'poly = ZZx(out["coeffs"])',
             }
         ),
         "field": (
@@ -880,6 +891,7 @@ class NFDownloader(Downloader):
                 "sage": 'field.<a> = NumberField(poly)',
                 "magma": 'field<a> := NumberField(poly);',
                 "gp": 'field = nfinit(poly);',
+                "oscar": 'field,a = number_field(poly)',
             }
         ),
     }
@@ -903,6 +915,7 @@ def number_field_search(info, query):
     parse_bracketed_posints(info,query,'signature',qfield=('degree','r2'),exactlength=2, allow0=True, extractor=lambda L: (L[0]+2*L[1],L[1]))
     parse_signed_ints(info,query,'discriminant',qfield=('disc_sign','disc_abs'))
     parse_floats(info, query, 'rd')
+    parse_floats(info, query, 'grd')
     parse_floats(info, query, 'regulator')
     parse_posints(info,query,'class_number')
     parse_posints(info,query,'relative_class_number')
@@ -1166,7 +1179,7 @@ class NFSearchArray(SearchArray):
             name="signature",
             label="Signature",
             knowl="nf.signature",
-            example="[1,1]")
+            example="(1,1)")
         discriminant = TextBox(
             name="discriminant",
             label="Discriminant",
@@ -1277,8 +1290,8 @@ class NFSearchArray(SearchArray):
             name="completions",
             label="$p$-adic completions",
             knowl="nf.padic_completion.search",
-            example_span="2.4.10.7 or 2.4.10.7,3.2.1.2",
-            example="2.4.10.7")
+            example_span="2.1.4.10a1.5 or 2.1.4.10a1.5,3.1.2.1a1.1",
+            example="2.1.4.10a1.5")
         monogenic = YesNoMaybeBox(
             name="monogenic",
             label="Monogenic",

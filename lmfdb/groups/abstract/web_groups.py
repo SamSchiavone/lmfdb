@@ -24,6 +24,7 @@ from sage.all import (
     is_prime,
     cartesian_product_iterator,
     exists,
+    euler_phi,
 )
 from sage.libs.gap.libgap import libgap
 from sage.libs.gap.element import GapElement
@@ -1736,7 +1737,7 @@ class WebAbstractGroup(WebObj):
         nonsplit = []
         subs = defaultdict(list)
         for sub in self.subgroups.values():
-            if sub.normal and (sub.split == False):
+            if sub.normal and (sub.split is False):
                 pair = (sub.subgroup, sub.quotient)
                 if pair not in subs:
                     nonsplit.append(sub)
@@ -2335,7 +2336,8 @@ class WebAbstractGroup(WebObj):
         if rep_type == "Lie":
             desc = "Groups of " + display_knowl("group.lie_type", "Lie type")
             reps = ", ".join(fr"$\{rep['family']}({rep['d']},{rep['q']})$" for rep in rdata)
-            return f'<tr><td>{desc}:</td><td colspan="5">{reps}</td></tr>'
+            code_cmd = " ".join([self.create_lie_type_snippet((rep['family'], rep['d'], rep['q'])) for rep in rdata])
+            return f'<tr><td>{desc}:</td><td colspan="5">{reps}</td></tr><tr><td colspan="6">{code_cmd}</td></tr>'
         elif rep_type == "PC":
             pres = self.presentation()
             if not skip_head:  #add copy button in certain cases
@@ -2572,7 +2574,7 @@ class WebAbstractGroup(WebObj):
         if self.aut_order is None:
             return "not computed"
         aut_order = pos_int_and_factor(self.aut_order)
-        tex = self.aut_tex
+        tex = getattr(self, "aut_tex", None)
         if tex is None:
             return f'Group of order {aut_order}'
         else:
@@ -2580,10 +2582,7 @@ class WebAbstractGroup(WebObj):
         if self.aut_group is not None:
             url = url_for(".by_label", label=self.aut_group)
             return f'<a href="{url}">${tex}$</a>, of order {aut_order}'
-        if tex is None:
-            return f"Group of order {aut_order}"
-        else:
-            return f'${tex}$'
+        return f"${tex}$, of order {aut_order}"
 
     def aut_group_knowl(self):
         if self.aut_order is None:
@@ -2591,7 +2590,7 @@ class WebAbstractGroup(WebObj):
         if self.live():
             return f"Group of order {self.aut_order}"
         aut_order = pos_int_and_factor(self.aut_order)
-        tex = self.aut_tex
+        tex = getattr(self, "aut_tex", None)
         if tex is None:
             tex = "Group"
             knowl = f'<a title = "{tex} [lmfdb.object_information]" knowl="lmfdb.object_information" kwargs="args={self.label}&func=autknowl_data">{tex}</a>'
@@ -2611,7 +2610,7 @@ class WebAbstractGroup(WebObj):
     # outer automorphism group
     def show_outer_group(self):
         if self.live():
-            return f"Group of order {self.order_order}"
+            return f"Group of order {self.outer_order}"
         tex = self.outer_tex
         if self.outer_group is None:
             if self.outer_order is None:
@@ -2844,6 +2843,32 @@ class WebAbstractGroup(WebObj):
                               post="</td></tr>")
         return snippet.place_code()
 
+    # Used for creating code snipets for Lie type representations
+    def create_lie_type_snippet(self,item):
+        snippet = CodeSnippet(self.code_snippets(), item)
+        return snippet.place_code()
+
+    @lazy_attribute
+    def lie_representations(self):
+        # Ideally we should get the Lie-type representations from the "gps_special_names" table:
+        # lie_reps = list(db.gps_special_names.search({'label':self.label}, projection={'family','gens','parameters'}))
+
+        # TODO: We should update groups data to use new family names
+        # For now, we'll implement a "old to new" family dictionary (can delete once groups data is updated)
+        old_to_new_family_name = {"GO":"Orth", "GOPlus":"OrthPlus", "GOMinus":"OrthMinus", "GU":"Unitary", "PGO":"PO",
+                                  "PGOPlus":"POPlus", "PGOMinus":"POMinus", "PGU":"PU", "CSp":"GSp", "CSO":"GSO", "CSOPlus":"GSOPlus",
+                                  "CSOMinus":"GSOMinus", "CSU":"GSU", "CO":"GOrth", "COPlus":"GOrthPlus", "COMinus":"GOrthMinus",
+                                  "CU":"GUnitary"}
+
+        # Temporary solution: Get Lie type representations from gps_groups table (the order here is important!)
+        if "Lie" in self.representations:
+            lie_reps = self.representations["Lie"]
+            for i in range(len(lie_reps)):
+                if lie_reps[i]['family'] in old_to_new_family_name:
+                    lie_reps[i]['family'] = old_to_new_family_name[lie_reps[i]['family']]
+            return lie_reps
+        return None
+
     @cached_method
     def code_snippets(self):
         if self.live():
@@ -2902,7 +2927,7 @@ class WebAbstractGroup(WebObj):
             LZqsage = "["+", ".join(["MS("+str(split_matrix_list(self.decode_as_matrix(g, "GLZq", ListForm=True), nZq))+")" for g in self.representations["GLZq"]["gens"]])+"]"
         else:
             nZq, Zq, LZq, LZqsplit, LZqsage = None, None, None, None, None
-# add below for GLFq implementation
+        # add below for GLFq implementation
         if "GLFq" in self.representations:
             nFq = self.representations["GLFq"]["d"]
             Fq = self.representations["GLFq"]["q"]
@@ -2924,6 +2949,73 @@ class WebAbstractGroup(WebObj):
                 # Adding the Sage versions of the matrix group code snippets:
                 'LZsage': LZsage, 'LFpsage': LFpsage, 'LZNsage': LZNsage, 'LZqsage': LZqsage, 'LFqsage': LFqsage,
         }
+
+        # The following code implements code snippets for the Lie-type matrix representations
+        magma_top_lie, gap_top_lie, sage_top_lie = None, None, None   # Keep track of Lie-type snippet for use as a top code snippet
+        gap_used_lie_gens, sage_used_lie_gens = False, False          # Track whether we need to use generators
+        if self.lie_representations is not None:
+            # Get Magma commands for all the Lie type families
+            gps_families_data = list(db.gps_families.search(projection={'family','magma_cmd'}))
+            magma_commands = {d['family']: d['magma_cmd'] for d in gps_families_data}
+            # Hardcoded list of Lie Type families available in GAP and Sage  (NB: Must ensure their implementation agrees with our definition!)
+            gap_families = ['GL','SL','PSL','PGL','Sp','SO','SU','PSp','PSO','PSU','Orth','Unitary','Omega','PO','PU','POmega','PGammaL','PSigmaL']
+            sage_families = ['GL','SL','PSL','PGL','PSp','PSU','Orth','Unitary','PU']
+
+            # Prioritise displaying the first Lie type representation which is implemented in the language
+            for lie_rep in self.lie_representations:
+                nLie, qLie = ZZ(lie_rep['d']), ZZ(lie_rep['q'])
+                lie_rep_key = (lie_rep['family'], nLie, qLie)
+                code[lie_rep_key] = dict()
+
+                code[lie_rep_key]['magma'] = "G := "+magma_commands[lie_rep['family']].replace("n,q", str(nLie)+","+str(qLie))+";"
+                if magma_top_lie is None:
+                    magma_top_lie = code[lie_rep_key]['magma']
+
+                if lie_rep['family'] in gap_families:
+                    code[lie_rep_key]['gap'] = code[lie_rep_key]['magma']
+                    if (gap_top_lie is None) or gap_used_lie_gens:
+                        gap_top_lie = code[lie_rep_key]['gap']
+                        gap_used_lie_gens = False
+                elif "gens" in lie_rep:
+                    lie_mats = [self.decode_as_matrix(g, "Lie", ListForm=True) for g in lie_rep["gens"]]
+                    if qLie.is_prime():
+                        e = libgap.One(GF(qLie))
+                        lie_gap_mats = [split_matrix_list_Fp(mat, nLie, e) for mat in lie_mats]
+                        gap_lie_code_snippet = code['GLFp']['gap'].format(**{'LFpsplit':lie_gap_mats})
+                    else:
+                        lie_gap_mats = "[" + ",".join(split_matrix_list_Fq(mat, nLie, qLie) for mat in lie_mats) + "]"
+                        gap_lie_code_snippet = code['GLFq']['gap'].format(**{'LFqsplit':lie_gap_mats})
+                    if gap_top_lie is None:
+                        gap_top_lie, gap_used_lie_gens = gap_lie_code_snippet, True
+
+                if lie_rep['family'] in sage_families:
+                    code[lie_rep_key]['sage'] = "G = "+magma_commands[lie_rep['family']].replace("n,q", str(nLie)+","+str(qLie))
+                    if (sage_top_lie is None) or sage_used_lie_gens:
+                        sage_top_lie = code[lie_rep_key]['sage']
+                        sage_used_lie_gens = False
+                elif "gens" in lie_rep:
+                    lie_mats = [self.decode_as_matrix(g, "Lie", ListForm=True) for g in lie_rep["gens"]]
+                    if qLie.is_prime():
+                        lie_sage_mats = "["+", ".join(["MS("+str(split_matrix_list(self.decode_as_matrix(g, "Lie", ListForm=True),nLie))+")" for g in lie_rep["gens"]])+"]"
+                        sage_lie_code_snippet = code['GLFp']['sage'].format(**{'LFpsage':lie_sage_mats, 'nFp':nLie, 'Fp':qLie})
+                    else:
+                        lie_sage_mats = "["+", ".join(["MS("+str(split_matrix_Fq_add_al(mat, nLie))+")" for mat in lie_mats])+"]"
+                        sage_lie_code_snippet = code['GLFq']['sage'].format(**{'LFqsage':lie_sage_mats, 'nFq':nLie, 'Fq':qLie})
+                    if sage_top_lie is None:
+                        sage_top_lie, sage_used_lie_gens = sage_lie_code_snippet, True
+
+        # In the case no Lie type representation is implemented natively in Sage or GAP, we display the first one with gens as a matrix group
+        # as a code snippet in the "Constructions" header (and as a possible candidate for the top code snippet)
+        if (gap_top_lie is not None) and gap_used_lie_gens:
+            for lie_rep in self.lie_representations:
+                if "gens" in lie_rep:
+                    code[(lie_rep['family'],lie_rep['d'],lie_rep['q'])]['gap'] = gap_top_lie
+                    break
+        if (sage_top_lie is not None) and sage_used_lie_gens:
+            for lie_rep in self.lie_representations:
+                if "gens" in lie_rep:
+                    code[(lie_rep['family'],lie_rep['d'],lie_rep['q'])]['sage'] = sage_top_lie
+                    break
 
         # Here, we add the (perhaps subjectively?) "best" implementation of this group as a code snippet in Magma/GAP/SageMath,
         # to display at the top of each group page.  This is computed and stored in code['code_description'].
@@ -2962,27 +3054,13 @@ class WebAbstractGroup(WebObj):
                 code['code_description']['gap'] = "G := DicyclicGroup("+str(self.order)+");"     # GAP Dic(n) has order n
                 code['code_description']['sage'] = "G = DiCyclicGroup("+str(self.order/4)+")"    # Sage Dic(n) has order 4n
             else:
-                # List of Lie Type families available in Magma  (NB: Must ensure the Magma implementation agrees with our definition!)
-                for f in ['GL', 'SL', 'PSL', 'PGL', 'Sp', 'SO', 'SU', 'PSp', 'PSO', 'PSU', 'SOPlus', 'SOMinus']:
-                    if f in [t['family'] for t in self_families]:
-                        fam_index = [t['family'] for t in self_families].index(f)
-                        lie_params = str(self_families[fam_index]['parameters']['n'])+", "+str(self_families[fam_index]['parameters']['q'])
-                        code['code_description']['magma'] = "G := "+f+"("+lie_params+");"
-                        break
-                # List of Lie Type families available in GAP  (NB: Must ensure the GAP implementation agrees with our definition!)
-                for f in ['GL', 'SL', 'PSL', 'PGL', 'Sp', 'SO', 'SU', 'PSp', 'PSO', 'PSU']:
-                    if f in [t['family'] for t in self_families]:
-                        fam_index = [t['family'] for t in self_families].index(f)
-                        lie_params = str(self_families[fam_index]['parameters']['n'])+", "+str(self_families[fam_index]['parameters']['q'])
-                        code['code_description']['gap'] = "G := "+f+"("+lie_params+");"
-                        break
-                # List of Lie Type families available in Sage (NB: Must ensure the Sage implementation agrees with our definition!)
-                for f in ['GL', 'SL', 'PSL', 'PGL']:
-                    if f in [t['family'] for t in self_families]:
-                        fam_index = [t['family'] for t in self_families].index(f)
-                        lie_params = str(self_families[fam_index]['parameters']['n'])+", "+str(self_families[fam_index]['parameters']['q'])
-                        code['code_description']['sage'] = "G = "+f+"("+lie_params+")"
-                        break
+                # Use a Lie Type matrix construction (if it exists and the Lie type generators were not used)
+                if magma_top_lie is not None:
+                    code['code_description']['magma'] = magma_top_lie
+                if (gap_top_lie is not None) and (not gap_used_lie_gens):
+                    code['code_description']['gap'] = gap_top_lie
+                if (sage_top_lie is not None) and (not sage_used_lie_gens):
+                    code['code_description']['sage'] = sage_top_lie
         # Checking if group is in the Chevalley or Twisted Chevalley family
         if ('Chev' in [t['family'] for t in self_families]) and ('magma' not in code['code_description']):
             chev_index = [t['family'] for t in self_families].index("Chev")
@@ -2999,7 +3077,7 @@ class WebAbstractGroup(WebObj):
                 if lang not in code['code_description']:
                     code['code_description'][lang] = 'G := SmallGroup('+gap_id[0]+', '+gap_id[1]+');'
             if 'sage_gap' not in code['code_description']:
-                code['code_description']['sage_gap'] = 'G = gap.SmallGroup('+gap_id[0]+', '+gap_id[1]+')'
+                code['code_description']['sage_gap'] = 'G = libgap.SmallGroup('+gap_id[0]+', '+gap_id[1]+')'
         # Otherwise, check if group is abelian (then can define as product of cyclic groups from its primary decomposition)
         if self.abelian:
             for lang in ['magma', 'gap']:
@@ -3021,6 +3099,11 @@ class WebAbstractGroup(WebObj):
                 for lang in code[code_rep]:
                     if lang not in code['code_description']:
                         code['code_description'][lang] = code[code_rep][lang]
+        # Finally, try using Lie constructions which required use of the generators
+        if (gap_top_lie is not None) and ('gap' not in code['code_description']):
+            code['code_description']['gap'] = gap_top_lie
+        if (sage_top_lie is not None) and ('sage' not in code['code_description']):
+            code['code_description']['sage'] = sage_top_lie
         # Otherwise, if absolutely all else fails, we display no code snippet at the top :(
 
         # If no Sage top code snippet, then we resort to implementing the group G using the GAP interface in Sage
@@ -3033,29 +3116,34 @@ class WebAbstractGroup(WebObj):
         # then unfortunately not all the default code snippets in Sage and Magma will work correctly!
         # As a (hopefully temporary) solution, we hide the code snippets which will not work with our implemention of G in the top code snippet
         # TODO: Find a better solution for this (would it be worth converting G to a permutation group within the top code snippet?)
-        if ("MatrixGroup" in code['code_description']['sage']) and ("permutation" not in code['code_description']['sage']):
+        if 'sage' in code['code_description'] and "MatrixGroup" in code['code_description']['sage'] and "permutation" not in code['code_description']['sage']:
             # Must disable all code snippets which do not work with MatrixGroup in Sage
             for c in ['composition_factors', 'is_cyclic', 'is_elementary_abelian', 'is_pgroup', 'abelianization', 'schur_multiplier',
                       'commutator', 'frattini_subgroup', 'fitting_subgroup', 'socle', 'derived_series', 'lower_central_series', 'upper_central_series']:
                 if c in code:
                     code[c].pop('sage', None)
-        if ("AbelianGroup" in code['code_description']['sage']) and ("permutation" not in code['code_description']['sage']):
+        if 'sage' in code['code_description'] and "AbelianGroup" in code['code_description']['sage'] and "permutation" not in code['code_description']['sage']:
             # Must disable all code snippets which do not work with AbelianGroup in Sage
             for c in ['composition_factors', 'is_elementary_abelian', 'is_nilpotent', 'is_perfect', 'is_pgroup', 'is_polycyclic', 'is_solvable', 'is_supersolvable',
                       'abelianization', 'schur_multiplier', 'center', 'commutator', 'frattini_subgroup', 'fitting_subgroup', 'socle',
                       'derived_series', 'lower_central_series', 'upper_central_series']:
                 if c in code:
                     code[c].pop('sage', None)
-        if ("MatrixGroup" in code['code_description']['magma']) and ("permutation" not in code['code_description']['magma']):
+        if 'magma' in code['code_description'] and "MatrixGroup" in code['code_description']['magma'] and "permutation" not in code['code_description']['magma']:
             # Must disable all code snippets which do not work with MatrixGroup in Magma
             for c in ['socle']:
                 if c in code:
                     code[c].pop('magma', None)
-        if ("AbelianGroup" in code['code_description']['magma']) and ("permutation" not in code['code_description']['magma']):
+        if 'magma' in code['code_description'] and "AbelianGroup" in code['code_description']['magma'] and "permutation" not in code['code_description']['magma']:
             # Must disable all code snippets which do not work with AbelianGroup in Magma
             for c in ['radical', 'socle']:
                 if c in code:
                     code[c].pop('magma', None)
+
+        # Hides code snippets for language lang if no top code snippet has been defined for lang
+        for lang in list(code['prompt']):
+            if lang not in code['code_description']:
+                code['prompt'].pop(lang, None)
 
         for prop in code:
             for lang in code[prop]:
@@ -3541,7 +3629,7 @@ class WebAbstractSubgroup(WebObj):
     @lazy_attribute
     def _others(self):
         """
-        Get information from gps_subgroups for each of the other subgroups referred to
+        Get information from gps_subgroup_search for each of the other subgroups referred to
         (centralizer, complements, contained_in, contains, core, normal_closure, normalizer)
         """
         labels = []
@@ -3668,6 +3756,14 @@ class WebAbstractConjClass(WebObj):
         newrep = newrep.replace(' ','')
         self.representative = newrep
         self.force_repr_elt = True
+
+    # extract from powers list the ones corresponding to ones dividing the order
+    def prime_powers(self):
+        plist = [z[0] for z in ZZ(self.group_order).factor()]
+        Nphi = self.group_order*euler_phi(self.group_order)
+        plist_long = [z[0] for z in ZZ(Nphi).factor()]
+        assert len(plist_long) == len(self.powers)
+        return [self.powers[plist_long.index(p)] for p in plist]
 
     def display_knowl(self, name=None):
         if not name:
