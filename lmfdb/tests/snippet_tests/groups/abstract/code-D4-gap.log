@@ -22,16 +22,16 @@
 [0mfalse
 [1m[34mgap> [0m[31mIsMonomialGroup(G);
 [0mtrue
-[1m[34mgap> [0mIsNilpotentGroup(G);
-[31m[0mtrue
-[1m[34mgap> [0m[31mIsPerfectGroup(G);
-[0mfalse
+[1m[34mgap> [0m[31mIsNilpotentGroup(G);
+[0mtrue
+[1m[34mgap> [0mIsPerfectGroup(G);
+[31m[0mfalse
 [1m[34mgap> [0m[31mIsPGroup(G);
 [0mtrue
 [1m[34mgap> [0m[31mIsPolycyclicGroup(G);
 [0mtrue
-[1m[34mgap> IsSimpleGroup(G);
-[0m[31m[0mfalse
+[1m[34mgap> [0m[31mIsSimpleGroup(G);
+[0mfalse
 [1m[34mgap> [0m[31mIsSolvableGroup(G);
 [0mtrue
 [1m[34mgap> [0m[31mIsSupersolvableGroup(G);
